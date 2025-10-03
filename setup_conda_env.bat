@@ -95,20 +95,10 @@ if exist "%ENV_PREFIX%\python.exe" (
 )
 echo.
 
-REM [5] 先装 Paddle（官方源），再装 requirements（清华源）
+REM [5] 安装 requirements（清华源）
 if exist "%ENV_PREFIX%\python.exe" (
-  echo [5] 安装 paddlepaddle-gpu==3.2.0 （Paddle 官方源）...
-  "%CONDA_EXE%" run -p "%ENV_PREFIX%" python -m pip install paddlepaddle-gpu==3.2.0 -i "%PADDLE_INDEX%"
-  if errorlevel 1 (
-    echo [错误] 安装 paddlepaddle-gpu 失败；可手动重试：
-    echo        "%CONDA_EXE%" run -p "%ENV_PREFIX%" python -m pip install paddlepaddle-gpu==3.2.0 -i "%PADDLE_INDEX%"
-    set "HAD_ERROR=1"
-  ) else (
-    echo     -> paddlepaddle-gpu 安装成功
-  )
-
   if exist "requirements.txt" (
-    echo     检测到 requirements.txt，开始安装（清华源）...
+    echo [5] 检测到 requirements.txt，开始安装（清华源）...
     "%CONDA_EXE%" run -p "%ENV_PREFIX%" python -m pip install -r requirements.txt -i "%PIP_INDEX%"
     if errorlevel 1 (
       echo [错误] requirements 安装失败；可手动重试：
@@ -122,6 +112,7 @@ if exist "%ENV_PREFIX%\python.exe" (
   )
 )
 echo.
+
 
 REM [6] 验证安装归属与环境目录
 if exist "%ENV_PREFIX%\python.exe" (

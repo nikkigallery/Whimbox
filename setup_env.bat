@@ -99,15 +99,6 @@ if exist "%VENV_PY%" (
 echo(
 
 echo(【5】安装项目依赖 requirements.txt（清华源）
-echo(    开始安装 paddlepaddle-gpu==3.2.0（使用 Paddle 官方源）...
-"%VENV_PY%" -m pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
-if errorlevel 1 (
-  echo([错误] paddlepaddle-gpu 安装失败；可手动重试：
-  echo(      "%VENV_PY%" -m pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
-  set "HAD_ERROR=1"
-) else (
-  echo(    → paddlepaddle-gpu 安装成功
-)
 
 if exist "requirements.txt" (
   echo(    检测到 requirements.txt，开始安装（明确用 venv 的 pip）...
