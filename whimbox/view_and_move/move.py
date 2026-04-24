@@ -155,10 +155,13 @@ class MoveController(AdvanceThreading):
             duration = 0.05
 
         # 开始移动
+        self.start_simple_move_ahead(duration)
+        # logger.debug(f'start move ahead, duration: {duration}, loop_time: {loop_time}')
+
+    def start_simple_move_ahead(self, duration):
         itt.key_down(keybind.KEYBIND_FORWARD)
         self.is_moving = True
         self.move_ahead_timer = AdvanceTimer(duration).start()
-        # logger.debug(f'start move ahead, duration: {duration}, loop_time: {loop_time}')
 
     def stop_move_ahead(self):
         self.is_moving = False

@@ -205,13 +205,16 @@ class AutoPathTask(TaskTemplate):
             if euclidean_distance(self.curr_position, self.stuck_position) < 1:
                 # 连续10秒都在同一位置，则认为卡住了
                 stuck_time = time.time() - self.stuck_time
-                if stuck_time > 10:
-                    raise Exception("卡住10秒了")
+                if stuck_time > 15:
+                    raise Exception("卡住15秒了")
                 elif stuck_time > 5 and (not self.has_try_break_stuck):
                     self.log_to_gui("卡住5秒了，尝试跳一下", is_loading=True)
-                    itt.key_down(keybind.KEYBIND_JUMP)
+                    self.jump_controller.stop_jump()
+                    self.move_controller.stop_move_ahead()
                     time.sleep(1)
-                    itt.key_up(keybind.KEYBIND_JUMP)
+                    self.move_controller.start_simple_move_ahead(1)
+                    self.jump_controller.start_jump()
+                    time.sleep(1.5)
                     self.has_try_break_stuck = True
             else:
                 self.clear_stuck()
@@ -520,7 +523,7 @@ class AutoPathTask(TaskTemplate):
 
 
 if __name__ == "__main__":
-    task = AutoPathTask(session_id="debug", path_name="测试卡住", should_magnet=True)
+    task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
     task_result = task.task_run()
     print(task_result.to_dict())
 
