@@ -327,9 +327,9 @@ def skip_to_page_main():
     stop_flag = get_current_stop_flag()
     while not stop_flag.is_set():
         time.sleep(0.5)
-        if not itt.get_img_existence(IconPageMainFeature):
+        if itt.get_img_existence(IconSkip) or itt.get_img_existence(IconClickSkip):
             itt.key_press(keybind.KEYBIND_INTERACTION)
-        else:
+        if itt.get_img_existence(IconPageMainFeature):
             break
 
 def skip_dialog():

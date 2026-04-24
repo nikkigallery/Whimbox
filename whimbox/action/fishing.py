@@ -323,8 +323,10 @@ class FishingTask(TaskTemplate):
 
 
 if __name__ == "__main__":
+    ability_manager.init_need_ability([ABILITY_NAME_FISH])
     # # CV_DEBUG_MODE = True
-    task = FishingTask(session_id="debug", fishing_type=FISHING_TYPE_HOME)
+    # task = FishingTask(session_id="debug", fishing_type=FISHING_TYPE_HOME)
+    task = FishingTask(session_id="debug", fishing_type=FISHING_TYPE_MIRALAND)
     task.task_run()
     # from whimbox.common.utils.img_utils import IMG_RATE
     # while True:
