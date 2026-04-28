@@ -1495,6 +1495,303 @@
                 -532050.1875,
                 -267032.71875
             ]
+        },
+        {
+            "region": "巨木之森",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "岩村海岸",
+            "position": [
+                -519143.625,
+                -27742.4609375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "荧湖西岸",
+            "position": [
+                -421984.0625,
+                -462017.96875
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "湖岸营地",
+            "position": [
+                -384308.875,
+                -477689.375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "龙眠花冢",
+            "position": [
+                -349617.28125,
+                -496786.78125
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "古息坡道",
+            "position": [
+                -317362.90625,
+                -520867.65625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "大拉姆居落迎厅入口",
+            "position": [
+                -308186.625,
+                -542085.9375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "往归摆厅",
+            "position": [
+                -282196.65625,
+                -566321.0625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "纪念地",
+            "position": [
+                -300990.1875,
+                -566472.4375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "疗愈地",
+            "position": [
+                -261026.1875,
+                -549441.25
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "蓝池北侧疗愈地渡口",
+            "position": [
+                -252362.78125,
+                -525151.4375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "灵魂大潮",
+            "position": [
+                -285698.28125,
+                -490667.1875
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "蓝池东侧修习所渡口",
+            "position": [
+                -248358.4375,
+                -501093.0
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "修习所",
+            "position": [
+                -233254.234375,
+                -485813.90625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "白汐滩归望湾",
+            "position": [
+                -244583.015625,
+                -472808.46875
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "修习所水岸",
+            "position": [
+                -222699.796875,
+                -472368.625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "孤石滩",
+            "position": [
+                -195050.703125,
+                -471611.3125
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "居落外绿坡",
+            "position": [
+                -304232.25,
+                -553624.9375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "灵魂观察所廊柱厅",
+            "position": [
+                -299355.21875,
+                -477303.84375
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "龙巢山飞瀑崖顶",
+            "position": [
+                -211171.515625,
+                -477568.0625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "龙巢山关隘遗址",
+            "position": [
+                -201277.78125,
+                -507468.53125
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "甜泉湖",
+            "position": [
+                -183494.125,
+                -536189.5625
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "幽息廊道外荒径",
+            "position": [
+                -176846.015625,
+                -477148.8125
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "龙埙遗所",
+            "position": [
+                -164101.171875,
+                -465597.53125
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "花涧幽谷",
+            "position": [
+                -361490.65625,
+                -489302.4375
+            ]
+        },
+        {
+            "region": "巨木之森",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "火山湖洞窟外",
+            "position": [
+                -405518.6875,
+                -254588.1875
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "契约碑",
+            "position": [
+                -155994.65625,
+                -566109.25
+            ]
+        },
+        {
+            "region": "埋骨地",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "居落广场升降台",
+            "position": [
+                -295121.21875,
+                -549887.1875
+            ]
         }
     ],
     "starsea": [

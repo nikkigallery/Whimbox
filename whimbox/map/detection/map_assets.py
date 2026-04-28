@@ -39,11 +39,11 @@ ArrowRotateMapAll = MapAsset("ArrowRotateMapAll")
 
 
 # 奇迹大陆地图，用于小地图位置匹配
-MiraLandMap = MapAsset("w01_v10_luma_05x")
+MiraLandMap = MapAsset("w01_v11_luma_05x")
 # 奇迹大陆地图，用于大地图匹配
-MiraLandBigMap = MapAsset("w01_v10_luma_0125x")
+MiraLandBigMap = MapAsset("w01_v11_luma_0125x")
 # 奇迹大陆地图，可匹配位置遮罩
-MiraLandBigMapMask = MapAsset("w01_v10_mask_0125x")
+MiraLandBigMapMask = MapAsset("w01_v11_mask_0125x")
 
 # 星海地图，用于小地图位置匹配
 StarSeaMap = MapAsset("w14000000_v2_luma_05x")

@@ -11,7 +11,7 @@ MAP_NAME_HOME = "home"
 REGION_NAME_HOME = "家园"
 
 REGION_NAME_TO_MAP_NAME_DICT = {
-    MAP_NAME_MIRALAND: ["纪念山地", "花愿镇", "微风绿野", "小石树田村", "石树田无人区", "祈愿树林", "巨木之森", "伊地峡谷", "蜗牛城"],
+    MAP_NAME_MIRALAND: ["纪念山地", "花愿镇", "微风绿野", "小石树田村", "石树田无人区", "祈愿树林", "巨木之森", "伊地峡谷", "蜗牛城", "埋骨地"],
     MAP_NAME_STARSEA: ["星海"],
     MAP_NAME_FIREWORK: ["花焰群岛"],
     MAP_NAME_SERNITY: ["无忧岛"],
@@ -23,7 +23,7 @@ UNSUPPORTED_REGIN_LIST = ["蜗牛城", "花焰群岛", "无忧岛", "丹青屿"]
 
 GAMELOC_TO_PNGMAP_SCALE = 2/90
 GAMELOC_TO_PNGMAP_OFFSET_DICT = {
-    MAP_NAME_MIRALAND: (16799, 8722),
+    MAP_NAME_MIRALAND: (16799, 15723),
     MAP_NAME_STARSEA: (2448, 1051),
     MAP_NAME_HOME: (1989, 1243),
     MAP_NAME_WANXIANG: (1950, 987),
