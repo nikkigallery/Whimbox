@@ -32,6 +32,9 @@
   "AreaBigMapMaterialTypeSelect": {
     "rel_path": "imgs\\Windows\\BigMap\\AreaBigMapMaterialTypeSelect.png"
   },
+  "AreaBigMapMeteorText": {
+    "rel_path": "imgs\\Windows\\BigMap\\AreaBigMapMeteorText.jpg"
+  },
   "AreaBigMapRegionName": {
     "rel_path": "imgs\\Windows\\BigMap\\AreaBigMapRegionName.png"
   },
@@ -587,6 +590,12 @@
   "IconZxxyTaskFinished": {
     "rel_path": "imgs\\Windows\\UI\\zxxy\\IconZxxyTaskFinished.png"
   },
+  "T_Icon_INT_Nature_Flower_05": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Nature_Flower_05.png"
+  },
+  "T_Icon_INT_Prop_Gameplay_326": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Prop_Gameplay_326.png"
+  },
   "T_Icon_item_AN0024": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0024.png"
   },
@@ -685,6 +694,9 @@
   },
   "T_Icon_item_AN0092R2": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0092R2.png"
+  },
+  "T_Icon_item_AN0092R3": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0092R3.png"
   },
   "T_Icon_item_AN0093": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0093.png"
@@ -788,6 +800,9 @@
   "T_Icon_item_AN0163": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0163.png"
   },
+  "T_Icon_item_AN0164": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0164.png"
+  },
   "T_Icon_item_AN0165": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0165.png"
   },
@@ -812,6 +827,21 @@
   "T_Icon_item_AN0178": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0178.png"
   },
+  "T_Icon_item_AN0179": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0179.png"
+  },
+  "T_Icon_item_AN0180": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0180.png"
+  },
+  "T_Icon_item_AN0182": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0182.png"
+  },
+  "T_Icon_item_AN0191": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0191.png"
+  },
+  "T_Icon_item_AN0192": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0192.png"
+  },
   "T_Icon_item_AN0208": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0208.png"
   },
@@ -833,8 +863,29 @@
   "T_Icon_item_AN0229": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0229.png"
   },
+  "T_Icon_item_AN0235": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0235.png"
+  },
   "T_Icon_item_AN0237": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0237.png"
+  },
+  "T_Icon_item_AN0237R2": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0237R2.png"
+  },
+  "T_Icon_item_AN0246": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0246.png"
+  },
+  "T_Icon_item_AN0256": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0256.png"
+  },
+  "T_Icon_item_AN0275": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0275.png"
+  },
+  "T_Icon_item_AN0276": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0276.png"
+  },
+  "T_Icon_item_ANQ0018": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_ANQ0018.png"
   },
   "T_Icon_item_ANQ0037": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_ANQ0037.png"
@@ -989,8 +1040,26 @@
   "T_Icon_item_INS0051": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0051.png"
   },
+  "T_Icon_item_INS0052": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0052.png"
+  },
+  "T_Icon_item_INS0053": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0053.png"
+  },
   "T_Icon_item_INS0055": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0055.png"
+  },
+  "T_Icon_item_INS0067": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0067.png"
+  },
+  "T_Icon_item_INS0067R2": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0067R2.png"
+  },
+  "T_Icon_item_INS0088": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0088.png"
+  },
+  "T_Icon_item_INS0091": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0091.png"
   },
   "T_Icon_item_INS0123": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_INS0123.png"
@@ -1013,17 +1082,17 @@
   "imgs_index": {
     "rel_path": "imgs\\imgs_index.json"
   },
-  "w01_v10": {
-    "rel_path": "imgs\\Maps\\w01_v10.png"
+  "w01_v11": {
+    "rel_path": "imgs\\Maps\\w01_v11.png"
   },
-  "w01_v10_luma_0125x": {
-    "rel_path": "imgs\\Maps\\w01_v10_luma_0125x.png"
+  "w01_v11_luma_0125x": {
+    "rel_path": "imgs\\Maps\\w01_v11_luma_0125x.png"
   },
-  "w01_v10_luma_05x": {
-    "rel_path": "imgs\\Maps\\w01_v10_luma_05x.png"
+  "w01_v11_luma_05x": {
+    "rel_path": "imgs\\Maps\\w01_v11_luma_05x.png"
   },
-  "w01_v10_mask_0125x": {
-    "rel_path": "imgs\\Maps\\w01_v10_mask_0125x.png"
+  "w01_v11_mask_0125x": {
+    "rel_path": "imgs\\Maps\\w01_v11_mask_0125x.png"
   },
   "w14000000_v2": {
     "rel_path": "imgs\\Maps\\w14000000_v2.png"
