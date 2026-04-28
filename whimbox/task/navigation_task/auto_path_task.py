@@ -198,12 +198,12 @@ class AutoPathTask(TaskTemplate):
 
     def check_stuck(self):
         if self.stuck_position is None:
-            if euclidean_distance(self.curr_position, self.last_position) < 1:
+            if euclidean_distance(self.curr_position, self.last_position) < 2:
                 self.stuck_time = time.time()
                 self.stuck_position = self.last_position
         else:
-            if euclidean_distance(self.curr_position, self.stuck_position) < 1:
-                # 连续10秒都在同一位置，则认为卡住了
+            if euclidean_distance(self.curr_position, self.stuck_position) < 2:
+                # 连续几秒都在同一位置，则认为卡住了
                 stuck_time = time.time() - self.stuck_time
                 if stuck_time > 15:
                     raise Exception("卡住15秒了")
@@ -523,7 +523,8 @@ class AutoPathTask(TaskTemplate):
 
 
 if __name__ == "__main__":
-    task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
+    # task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
+    task = AutoPathTask(session_id="debug", path_name="伊地峡谷五个钓鱼点 ( 采集+捕虫 )")
     task_result = task.task_run()
     print(task_result.to_dict())
 
