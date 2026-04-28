@@ -251,6 +251,70 @@
         "track": true,
         "jihua": true
     },
+    "风旋果": {
+        "game_img": "T_Icon_item_INS0088",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "晴雨伞": {
+        "game_img": "T_Icon_item_INS0052",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "风舞花": {
+        "game_img": "T_Icon_INT_Nature_Flower_05",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "蓝鳞晶": {
+        "game_img": "T_Icon_INT_Prop_Gameplay_326",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "汐萤蟹": {
+        "game_img": "T_Icon_item_AN0275",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "骨焰花": {
+        "game_img": "T_Icon_item_INS0053",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "龙棘瑚": {
+        "game_img": "T_Icon_item_INS0091",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "烛融花": {
+        "game_img": "T_Icon_item_INS0067",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "烛荧花": {
+        "game_img": "T_Icon_item_INS0067R2",
+        "type": "plant",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+
 
     "笔刷鱼": {
         "game_img": "T_Icon_item_AN0024",
@@ -431,6 +495,20 @@
         "game_img": "T_Icon_item_AN0160",
         "type": "fish",
         "dig": true,
+        "track": true,
+        "jihua": true
+    },
+    "卷尾伞鱼": {
+        "game_img": "T_Icon_item_AN0246",
+        "type": "fish",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "澜旗鱼": {
+        "game_img": "T_Icon_item_AN0182",
+        "type": "fish",
+        "dig": false,
         "track": true,
         "jihua": true
     },
@@ -750,6 +828,56 @@
         "track": true,
         "jihua": true
     },
+    "胭脂翎羽": {
+        "game_img": "T_Icon_item_ANQ0018",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "栗蓬团绒": {
+        "game_img": "T_Icon_item_AN0237R2",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "羽巾绒": {
+        "game_img": "T_Icon_item_AN0256",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "金灵毛球": {
+        "game_img": "T_Icon_item_AN0092R3",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "茸芽鹿绒": {
+        "game_img": "T_Icon_item_AN0191",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "大叶鹿绒": {
+        "game_img": "T_Icon_item_AN0192",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+    "涅拉羽": {
+        "game_img": "T_Icon_item_AN0164",
+        "type": "animal",
+        "dig": false,
+        "track": true,
+        "jihua": true
+    },
+
 
     "发卡蚱蜢":{
         "game_img": "T_Icon_item_AN0068",
@@ -935,6 +1063,34 @@
     },
     "探险家蜜蜂": {
         "game_img": "T_Icon_item_ANW0034R2",
+        "type": "insect",
+        "dig": true,
+        "track": true,
+        "jihua": true
+    },
+    "革袋甲": {
+        "game_img": "T_Icon_item_AN0180",
+        "type": "insect",
+        "dig": true,
+        "track": true,
+        "jihua": true
+    },
+    "珍蛛": {
+        "game_img": "T_Icon_item_AN0179",
+        "type": "insect",
+        "dig": true,
+        "track": true,
+        "jihua": true
+    },
+    "损音甲": {
+        "game_img": "T_Icon_item_AN0276",
+        "type": "insect",
+        "dig": true,
+        "track": true,
+        "jihua": true
+    },
+    "蜉幽幽": {
+        "game_img": "T_Icon_item_AN0235",
         "type": "insect",
         "dig": true,
         "track": true,
