@@ -109,6 +109,10 @@ AreaJihuaCostSelect = Area(anchor=ANCHOR_TOP_LEFT, expand=True)
 ButtonJihuaNumMax = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_CENTER)
 ButtonJihuaNumConfirm = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_CENTER)
 ButtonJihuaFinallyConfirm = Button(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=ANCHOR_BOTTOM_RIGHT)
+AreaJihuaNumOrQualityChooseButton = Area(anchor=ANCHOR_BOTTOM_LEFT)
+AreaJihuaNumOrQualityChooseList = Area(anchor=ANCHOR_BOTTOM_LEFT)
+ButtonJihuaSort = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
+AreaJihuaFirstMaterial = Area(anchor=ANCHOR_TOP_LEFT)
 
 # 魔物试炼幻境相关
 # 基本可以复用祝福闪光幻境

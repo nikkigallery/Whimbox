@@ -24,10 +24,12 @@ class JihuaTask(TaskTemplate):
         if cost_material:
             self.cost_materials = [cost_material]
         else:
-            self.cost_materials = [
-                global_config.get("OneDragon", "jihua_cost"), 
-                global_config.get("OneDragon", "jihua_cost_2"), 
-                global_config.get("OneDragon", "jihua_cost_3")]
+            self.cost_most = global_config.get_bool("OneDragon", "jihua_most")
+            if not self.cost_most:
+                self.cost_materials = [
+                    global_config.get("OneDragon", "jihua_cost"), 
+                    global_config.get("OneDragon", "jihua_cost_2"), 
+                    global_config.get("OneDragon", "jihua_cost_3")]
 
     @register_step("正在前往素材激化幻境")
     def step1(self):
@@ -79,6 +81,20 @@ class JihuaTask(TaskTemplate):
 
     @register_step("选择激化素材")
     def step5(self):
+        # 消耗数量最多的材料
+        if self.cost_most:
+            AreaJihuaNumOrQualityChooseButton.click()
+            itt.delay(0.2, comment="等待数量品质选择框出现")
+            if scroll_find_click(AreaJihuaNumOrQualityChooseList, "数量", need_scroll=False):
+                itt.delay(0.2)
+                wait_until_appear_then_click(ButtonJihuaSort)
+                itt.wait_until_stable()
+                AreaJihuaFirstMaterial.click()
+                return
+            else:
+                self.log_to_gui("未找到数量/品质选择按钮，继续使用默认材料", is_error=True)
+
+        # 消耗设置的材料
         for cost_material in self.cost_materials:
             if cost_material not in material_icon_dict:
                 self.log_to_gui(f"不支持使用{cost_material}作为消耗材料，尝试使用备选素材", is_error=True)

@@ -96,6 +96,10 @@
             "value": "闪亮泡泡",
             "description": "激化幻境的默认兑换目标"
         },
+        "jihua_most": {
+            "value": "false",
+            "description": "激化幻境消耗数量最多的材料（勾选后将无视其他消耗材料设置）"
+        },
         "jihua_cost": {
             "value": "星荧草",
             "description": "激化幻境的默认消耗材料"
