@@ -188,12 +188,9 @@ class TaskTemplate:
             else:
                 # 非手动停止导致的失败，就再试一次
                 if not self.need_stop():
-                    self.log_to_gui(f"自动返回主界面，重试一次")
-                    back_to_page_main()
+                    self.log_to_gui(f"自动重试一次")
                     self.task_result = TaskResult() # 重置一下任务结果
                     res = self._task_run()
-                    if res.status == STATE_TYPE_ERROR:
-                        back_to_page_main()
                     return res
                 else:
                     return res
