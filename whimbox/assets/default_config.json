@@ -38,19 +38,23 @@
         },
         "auto_dialogue": {
             "value": "false",
-            "description": "是否启用自动对话"
+            "description": "自动对话"
         },
         "auto_pickup": {
             "value": "false",
-            "description": "是否启用自动采集"
+            "description": "自动采集"
         },
         "auto_clear": {
             "value": "false",
-            "description": "是否启用自动清洁跳过"
+            "description": "自动清洁跳过"
         },
         "auto_flourish": {
             "value": "false",
-            "description": "是否启用自动芳间巡游"
+            "description": "自动连按萤火虫能力（切换采集能力后，右键启停）"
+        },
+        "auto_floral": {
+            "value": "false",
+            "description": "自动连按花套能力（切换捕虫能力后，右键启停）"
         }
     },
     "Agent": {

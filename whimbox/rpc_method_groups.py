@@ -242,12 +242,24 @@ def _serialize_script_info(record: Any) -> Dict[str, Any]:
 
 
 def _get_background_state() -> Dict[str, Any]:
+    feature_keys = {feature.value for feature in BackgroundFeature}
+    feature_items = [
+        {
+            "key": key,
+            "label": item.get("description", key),
+            "description": item.get("description", ""),
+            "type": _infer_config_type(item.get("value")),
+        }
+        for key, item in (DEFAULT_CONFIG.get("BackgroundTask") or {}).items()
+        if key in feature_keys
+    ]
     return {
         "running": background_manager.is_running(),
         "features": {
             feature.value: background_manager.is_feature_enabled(feature)
             for feature in BackgroundFeature
         },
+        "feature_items": feature_items,
     }
 
 

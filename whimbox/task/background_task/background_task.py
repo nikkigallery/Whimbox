@@ -16,8 +16,9 @@ from whimbox.common.utils.img_utils import process_with_hsv_limit, similar_img
 import cv2
 from pynput import mouse
 from whimbox.ability.ability import ability_manager
-from whimbox.ability.cvar import ABILITY_NAME_FLOURISH
+from whimbox.ability.cvar import ABILITY_NAME_FLOURISH, ABILITY_NAME_INSECT
 from whimbox.config.config import global_config
+from whimbox.config.default_config import DEFAULT_CONFIG
 from whimbox.tool_invocation_coordinator import tool_invocation_coordinator
 
 
@@ -28,6 +29,7 @@ class BackgroundFeature(Enum):
     AUTO_PICKUP = "auto_pickup"
     AUTO_CLEAR = "auto_clear"
     AUTO_FLOURISH = "auto_flourish"
+    AUTO_FLOURAL = "auto_floral"
 
 
 class FeatureConfig:
@@ -81,13 +83,13 @@ class BackgroundTaskManager:
         self.is_game_started = False
         self.is_game_shape_ok = False
         
-        # 功能配置（默认全部关闭，设置不同的执行间隔）
+        interval_map = {
+            BackgroundFeature.AUTO_PICKUP: 1,
+            BackgroundFeature.AUTO_CLEAR: 3,
+        }
         self.feature_configs = {
-            BackgroundFeature.AUTO_FISHING: FeatureConfig(enabled=False, interval=5),
-            BackgroundFeature.AUTO_DIALOGUE: FeatureConfig(enabled=False, interval=5),
-            BackgroundFeature.AUTO_PICKUP: FeatureConfig(enabled=False, interval=1),
-            BackgroundFeature.AUTO_CLEAR: FeatureConfig(enabled=False, interval=3),
-            BackgroundFeature.AUTO_FLOURISH: FeatureConfig(enabled=False, interval=5),
+            feature: FeatureConfig(enabled=False, interval=interval_map.get(feature, 5))
+            for feature in self._iter_configured_features()
         }
         
         # 从配置文件加载状态（但不自动启动任务）
@@ -119,23 +121,23 @@ class BackgroundTaskManager:
     def _load_from_config(self):
         """从配置文件加载状态"""
         try:
-            # 加载各个功能的启用状态
-            auto_fishing = global_config.get_bool("BackgroundTask", "auto_fishing", False)
-            auto_dialogue = global_config.get_bool("BackgroundTask", "auto_dialogue", False)
-            auto_pickup = global_config.get_bool("BackgroundTask", "auto_pickup", False)
-            auto_clear = global_config.get_bool("BackgroundTask", "auto_clear", False)
-            auto_flourish = global_config.get_bool("BackgroundTask", "auto_flourish", False)
-            
-            # 设置状态（不保存到配置文件，避免递归）
-            self.feature_configs[BackgroundFeature.AUTO_FISHING].enabled = auto_fishing
-            self.feature_configs[BackgroundFeature.AUTO_DIALOGUE].enabled = auto_dialogue
-            self.feature_configs[BackgroundFeature.AUTO_PICKUP].enabled = auto_pickup
-            self.feature_configs[BackgroundFeature.AUTO_CLEAR].enabled = auto_clear
-            self.feature_configs[BackgroundFeature.AUTO_FLOURISH].enabled = auto_flourish
-            
-            logger.info(f"从配置文件加载后台任务状态: 钓鱼={auto_fishing}, 对话={auto_dialogue}, 采集={auto_pickup}, 清洁={auto_clear}, 芳间巡游={auto_flourish}")
+            loaded_states = {}
+            for feature in self._iter_configured_features():
+                enabled = global_config.get_bool("BackgroundTask", feature.value, False)
+                self.feature_configs.setdefault(feature, FeatureConfig()).enabled = enabled
+                loaded_states[feature.value] = enabled
+
+            logger.info(f"从配置文件加载后台任务状态: {loaded_states}")
         except Exception as e:
             logger.warning(f"加载后台任务配置失败: {e}")
+
+    def _iter_configured_features(self):
+        """Return implemented background features in default-config order."""
+        for key in (DEFAULT_CONFIG.get("BackgroundTask") or {}):
+            try:
+                yield BackgroundFeature(key)
+            except ValueError:
+                logger.warning(f"BackgroundTask config key has no implementation: {key}")
     
     def _save_to_config(self, feature: BackgroundFeature, enabled: bool):
         """保存单个功能状态到配置文件"""
@@ -199,9 +201,11 @@ class BackgroundTask:
 
         self.is_auto_click = False
         self.need_flourish = False
+        self.need_floral = False
 
     def on_mouse_click(self, x, y, button, pressed):
         if (not self.was_paused) and (button == mouse.Button.right) and pressed and (not self.is_auto_click):
+            # 启停萤火虫套能力
             flourish_config = self.manager.get_feature_config(BackgroundFeature.AUTO_FLOURISH)
             if flourish_config and flourish_config.enabled and HANDLE_OBJ.is_foreground():
                 if self.need_flourish:
@@ -210,6 +214,14 @@ class BackgroundTask:
                 else:
                     if ability_manager.get_current_ability() == ABILITY_NAME_FLOURISH:
                         self.need_flourish = True
+            # 启停花套能力
+            floral_config = self.manager.get_feature_config(BackgroundFeature.AUTO_FLOURAL)
+            if floral_config and floral_config.enabled and HANDLE_OBJ.is_foreground():
+                if self.need_floral:
+                    self.need_floral = False
+                else:
+                    if ability_manager.get_current_ability() == ABILITY_NAME_INSECT:
+                        self.need_floral = True
 
     def _create_mouse_listener(self):
         self.mouse_listener = mouse.Listener(on_click=self.on_mouse_click)
@@ -383,10 +395,19 @@ class BackgroundTask:
                                 if not self._detect_pickup_opportunity(cap):
                                     break
 
-                    # 检测芳间巡游状态 - 根据间隔执行
+                    # 检测萤火虫套状态 - 根据间隔执行
                     flourish_config = self.manager.get_feature_config(BackgroundFeature.AUTO_FLOURISH)
                     if self.need_flourish and flourish_config and flourish_config.should_execute():
-                        if self._detect_flourish_opportunity(cap):
+                        if ability_manager.check_current_ability(IconAbilityFlourish, cap):
+                            self.is_auto_click = True
+                            itt.right_click()
+                            self.is_auto_click = False
+                            time.sleep(0.3)
+
+                    # 检测花套状态 - 根据间隔执行
+                    floral_config = self.manager.get_feature_config(BackgroundFeature.AUTO_FLOURAL)
+                    if self.need_floral and floral_config and floral_config.should_execute():
+                        if ability_manager.check_current_ability(IconAbilityInsect, cap):
                             self.is_auto_click = True
                             itt.right_click()
                             self.is_auto_click = False
@@ -427,6 +448,8 @@ class BackgroundTask:
                             time.sleep(1)
                         else:
                             logger.error(f"后台小工具检测出错: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                 # 等待一段时间再检测
                 time.sleep(self.check_interval)
@@ -578,19 +601,6 @@ class BackgroundTask:
         if itt.get_img_existence(IconPickupFeature, cap=cap):
             return True
         return False
-
-    def _detect_flourish_opportunity(self, cap) -> bool:
-        """检测是否可以芳间巡游"""
-        cap = itt.capture(anchor_posi=AreaAbilityButton.position)
-        lower_white = [0, 0, 230]
-        upper_white = [180, 60, 255]
-        img = process_with_hsv_limit(cap, lower_white, upper_white)
-        resize_icon = cv2.resize(IconAbilityFlourish.image, None, fx=0.73, fy=0.73, interpolation=cv2.INTER_LINEAR)
-        rate = similar_img(img, resize_icon[:, :, 0], ret_mode=IMG_RATE)
-        if rate > 0.8:
-            return True
-        else:
-            return False
 
     def _detect_clear_opportunity(self, cap) -> bool:
         """检测是否可以清洁跳过"""

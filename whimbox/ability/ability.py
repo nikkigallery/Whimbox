@@ -54,6 +54,21 @@ class AbilityManager:
                 return icon_name_to_ability_name.get(icon.name, None)
         return None
 
+    def check_current_ability(self, ability_icon:ImgIcon, cap=None):
+        if cap is not None:
+            cap = crop(cap, AreaAbilityButton.position)
+        else:
+            cap = itt.capture(anchor_posi=AreaAbilityButton.position)
+        lower_white = [0, 0, 230]
+        upper_white = [180, 60, 255]
+        img = process_with_hsv_limit(cap, lower_white, upper_white)
+        resize_icon = cv2.resize(ability_icon.image, None, fx=0.73, fy=0.73, interpolation=cv2.INTER_LINEAR)
+        rate = similar_img(img, resize_icon[:, :, 0], ret_mode=IMG_RATE)
+        if rate > 0.8:
+            return True
+        else:
+            return False
+
     def _get_ability_hsv_icon(self, center, cap):
         area = area_offset((-ability_icon_radius, -ability_icon_radius, ability_icon_radius, ability_icon_radius), offset=center)
         area = AnchorPosi(area[0], area[1], area[2], area[3], anchor=ANCHOR_CENTER)
