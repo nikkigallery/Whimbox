@@ -34,7 +34,7 @@
     "BackgroundTask": {
         "auto_fishing": {
             "value": "false",
-            "description": "是否启用自动钓鱼"
+            "description": "自动钓鱼"
         },
         "auto_dialogue": {
             "value": "false",
@@ -79,6 +79,10 @@
         "auto_start": {
             "value": "false",
             "description": "启动奇想盒时，自动运行一条龙"
+        },
+        "change_account": {
+            "value": "false",
+            "description": "为所有账号运行一条龙"
         },
         "start_magnet": {
             "value": "false",

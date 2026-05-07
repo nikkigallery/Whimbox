@@ -20,10 +20,18 @@ AreaEscEntrances = Area(anchor=ANCHOR_LEFT_CENTER)
 # 商城抽卡特征
 IconGachaFeature = ImgIcon(print_log=LOG_NONE, threshold=0.99, anchor=ANCHOR_TOP_RIGHT)
 IconShopFeature = ImgIcon(print_log=LOG_NONE, threshold=0.99, anchor=ANCHOR_TOP_LEFT)
-# 登录界面特征
+# 登录流程特征
 # IconPageLoginFeature = ImgIcon(print_log=LOG_ALL, threshold=0.90, hsv_limit=([0, 0, 220], [179, 50, 255]))
 AreaLoginOCR = Area(anchor=ANCHOR_BOTTOM_CENTER)
 AreaLaunchButton = Area()
+ButtonExit = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,30,250], [179,60,255]), anchor=ANCHOR_BOTTOM_LEFT)
+AreaExitBackLoginButton = Area(anchor=ANCHOR_CENTER)
+TextExitBackLoginButton = Text("返回登录", cap_area = AreaExitBackLoginButton)
+ButtonExitLogout = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,200], [179,80,255]), anchor=ANCHOR_TOP_RIGHT)
+ButtonLogin = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,180], [30,255,255]), anchor=ANCHOR_BOTTOM_CENTER)
+AreaLoginAccountList = Area(anchor=ANCHOR_CENTER)
+AreaLoginAccountLoginButton = Area(anchor=ANCHOR_CENTER)
+TextLoginAccountLoginButton = Text("登录", cap_area = AreaLoginAccountLoginButton)
 # 聊天框特征
 IconPageChatFeature = ImgIcon(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 ButtonPageChatClose = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_TOP_LEFT)

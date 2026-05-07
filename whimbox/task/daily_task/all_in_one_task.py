@@ -6,6 +6,8 @@ from whimbox.task.mira_crown_task.mira_crown_task import MiraCrownTask
 from whimbox.task.daily_task.cvar import *
 from whimbox.task.common_task.start_game_task import StartGameTask
 from whimbox.task.common_task.close_game_task import CloseGameTask
+from whimbox.task.common_task.change_account_task import ChangeAccountTask
+from whimbox.task.common_task.enter_game_task import EnterGameTask
 from whimbox.task.macro_task.run_macro_task import RunMacroTask
 from whimbox.task.navigation_task.auto_path_task import AutoPathTask
 from whimbox.map.detection.cvars import MAP_NAME_HOME, MAP_NAME_MIRALAND, MAP_NAME_UNSUPPORTED
@@ -36,12 +38,18 @@ STEP_RESULT_SKIPPED = "skipped"
 class AllInOneTask(TaskTemplate):
     def __init__(self, session_id):
         super().__init__(session_id=session_id, name="all_in_one_task")
+        self.game_already_started = False
         self.default_step_states = {
             key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
         }
         self.has_meteor_today = False
         self.pre_custom_step_results = []
         self.post_custom_step_results = []
+        self.change_account_enabled = global_config.get_bool("OneDragon", "change_account", False)
+        self.account_list = []
+        self.finished_account_list = []
+        self.current_account = ""
+        self.account_results = []
         self.default_step_enabled = self._load_default_step_enabled()
         self.pre_custom_steps = self._load_custom_steps("OneDragonPreCustomSteps")
         self.post_custom_steps = self._load_post_custom_steps()
@@ -90,6 +98,11 @@ class AllInOneTask(TaskTemplate):
     def _rebuild_step_order(self):
         step_order = ["step_start_game"]
 
+        if self.change_account_enabled:
+            step_order.append("step_change_account")
+        else:
+            step_order.append("step_enter_game")
+
         if any(step.get("enabled", True) for step in self.pre_custom_steps):
             step_order.append("step_pre_custom_steps")
 
@@ -111,8 +124,31 @@ class AllInOneTask(TaskTemplate):
         if any(step.get("enabled", True) for step in self.post_custom_steps):
             step_order.append("step_post_custom_steps")
 
+        if self.change_account_enabled:
+            step_order.append("step_finish_account")
+
         step_order.append("step8")
         self.step_order = step_order
+
+    def _reset_account_result_state(self):
+        self.default_step_states = {
+            key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
+        }
+        self.has_meteor_today = False
+        self.pre_custom_step_results = []
+        self.post_custom_step_results = []
+
+    def _snapshot_current_account_result(self):
+        self.account_results.append(
+            {
+                "account_name": self.current_account,
+                "default_steps": dict(self.default_step_states),
+                "has_meteor_today": self.has_meteor_today,
+                "pre_custom_steps": [dict(item) for item in self.pre_custom_step_results],
+                "post_custom_steps": [dict(item) for item in self.post_custom_step_results],
+            }
+        )
+        self._reset_account_result_state()
 
     def _set_default_step_result(self, key, task_result):
         status = getattr(task_result, "status", "")
@@ -187,6 +223,36 @@ class AllInOneTask(TaskTemplate):
             return f"❌{title}失败：{message}"
         return f"❌{title}失败"
 
+    def _format_account_summary_lines(self, account_result):
+        account_name = account_result.get("account_name", 1)
+        msg_lines = [f"账号{account_name}："]
+        default_steps = account_result.get("default_steps", {})
+        for key, _, label in DEFAULT_STEP_CONFIG:
+            status = default_steps.get(key, STEP_RESULT_SKIPPED)
+            if status == STEP_RESULT_SUCCESS:
+                msg_lines.append(f"✅{label}已完成")
+            elif status == STEP_RESULT_SKIPPED:
+                msg_lines.append(f"⏭️{label}已跳过")
+            else:
+                msg_lines.append(f"❌{label}未完成")
+
+        if account_result.get("has_meteor_today"):
+            msg_lines.append("❗发现今日有巨陨星❗")
+
+        pre_custom_steps = account_result.get("pre_custom_steps", [])
+        if pre_custom_steps:
+            msg_lines.append("前置步骤：")
+            for item in pre_custom_steps:
+                msg_lines.append(self._format_custom_summary_line(item))
+
+        post_custom_steps = account_result.get("post_custom_steps", [])
+        if post_custom_steps:
+            msg_lines.append("后置步骤：")
+            for item in post_custom_steps:
+                msg_lines.append(self._format_custom_summary_line(item))
+
+        return msg_lines
+
     def _run_custom_steps(self, steps, result_list):
         for step in steps:
             if not step.get("enabled", True):
@@ -221,10 +287,23 @@ class AllInOneTask(TaskTemplate):
         task_result = start_game_task.task_run()
         if task_result.status == STATE_TYPE_SUCCESS:
             _, width, height = HANDLE_OBJ.check_shape()
+            logger.info(f"当前游戏分辨率：{width}x{height}")
             if width > 2560 or width < 1920:
                 msg = f"❗当前游戏分辨率：{width}x{height}。推荐使用1920x1080或1920x1200或2560x1440或2560x1600分辨率，窗口模式。如遇到bug，请修改游戏分辨率和显示模式后重试"
                 self.log_to_gui(msg)
+            if task_result.message == "已成功进入游戏":
+                self.game_already_started = True
         else:
+            self.update_task_result(STATE_TYPE_FAILED, task_result.message)
+            return STEP_NAME_FINISH
+
+    @ register_step("")
+    def step_enter_game(self):
+        if self.game_already_started:
+            return
+        enter_game_task = EnterGameTask(session_id=self.session_id)
+        task_result = enter_game_task.task_run()
+        if task_result.status != STATE_TYPE_SUCCESS:
             self.update_task_result(STATE_TYPE_FAILED, task_result.message)
             return STEP_NAME_FINISH
 
@@ -303,8 +382,63 @@ class AllInOneTask(TaskTemplate):
     def step_post_custom_steps(self):
         return self._run_custom_steps(self.post_custom_steps, self.post_custom_step_results)
 
+    def _quit_to_login(self):
+        from whimbox.ui.ui_assets import ButtonExit, TextExitBackLoginButton
+        from whimbox.ui.page_assets import page_esc
+        from whimbox.common.utils.ui_utils import wait_until_appear_then_click
+        ui_control.goto_page(page_esc)
+        if wait_until_appear_then_click(ButtonExit):
+            time.sleep(0.5)
+            if wait_until_appear_then_click(TextExitBackLoginButton):
+                return True
+        return False
+
+    @register_step("切换账号")
+    def step_change_account(self):
+        if self.game_already_started:
+            if not self._quit_to_login():
+                self.log_to_gui("返回登录界面失败，只完成当前账号一条龙", is_error=True)
+                return
+
+        task_result = ChangeAccountTask(
+            session_id=self.session_id,
+            account_list=self.account_list,
+            finished_account_list=self.finished_account_list
+        ).task_run()
+
+        if task_result.status == STATE_TYPE_SUCCESS:
+            self.current_account = task_result.data['current_account']
+            return
+        else:
+            self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message)
+            return STEP_NAME_FINISH
+
+    @register_step("当前账号一条龙已完成")
+    def step_finish_account(self):
+        self._snapshot_current_account_result()
+        self.finished_account_list.append(self.current_account)
+        if len(self.account_list) <= len(self.finished_account_list):
+            return "step8"
+
+        self.log_to_gui("返回登录界面，准备切换账号")
+        if self._quit_to_login():
+            return "step_change_account"
+        else:
+            return "step8"
+
     @register_step("一条龙结束")
     def step8(self):
+        if self.change_account_enabled:
+            msg_lines = ["任务结果如下："]
+            for account_result in self.account_results:
+                msg_lines.append("================")
+                msg_lines.extend(self._format_account_summary_lines(account_result))
+            self.update_task_result(
+                message="\n".join(msg_lines),
+                data=self.account_results,
+            )
+            return
+
         msg_lines = ["任务结果如下："]
         for key, _, label in DEFAULT_STEP_CONFIG:
             msg_lines.append(self._format_default_summary_line(key, label))
@@ -326,9 +460,9 @@ class AllInOneTask(TaskTemplate):
             message="\n".join(msg_lines),
             data={
                 "default_steps": dict(self.default_step_states),
+                "has_meteor_today": self.has_meteor_today,
                 "pre_custom_steps": list(self.pre_custom_step_results),
                 "post_custom_steps": list(self.post_custom_step_results),
-                "custom_steps": list(self.post_custom_step_results),
             },
         )
 

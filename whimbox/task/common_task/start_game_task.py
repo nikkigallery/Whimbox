@@ -116,7 +116,7 @@ class StartGameTask(TaskTemplate):
                 HANDLE_OBJ.refresh_handle()
             time.sleep(5)
 
-    @register_step("进入游戏")
+    @register_step("准备进入游戏")
     def step3(self):
         HANDLE_OBJ.set_foreground()
         # 判断游戏是否在加载中
@@ -149,37 +149,9 @@ class StartGameTask(TaskTemplate):
                 self.log_to_gui("有登录按钮我直接点！")
                 AreaLoginOCR.click(target_box=text_box_dict["注册\\登录"])
             elif "点击进入游戏" in text_box_dict:
-                AreaLoginOCR.click(target_box=text_box_dict["点击进入游戏"])
                 break
             else:
                 itt.key_press('esc')
-        # 不停点击，直到进入loading界面
-        while not self.need_stop():
-            time.sleep(1)
-            itt.move_and_click((100, 100))
-            if itt.get_img_existence(IconUILoading):
-                break
-    
-    @register_step("加载游戏中……")
-    def step4(self):
-        while not self.need_stop():
-            time.sleep(1)
-            if not itt.get_img_existence(IconUILoading):
-                self.log_to_gui("游戏加载完成")
-                break
-        # 不停点击，尝试点掉月卡界面，直到出现主界面
-        self.log_to_gui("检测是否需要领取小月卡")
-        times = 0
-        while not self.need_stop():
-            time.sleep(1)
-            # 有些电脑比较卡，会在小月卡出现前卡出主界面特征，所以需要多次验证
-            if itt.get_img_existence(IconPageMainFeature):
-                times += 1
-                if times > 3:
-                    self.update_task_result(status=STATE_TYPE_SUCCESS, message="成功进入游戏")
-                    break
-            else:
-                itt.move_and_click((1920/2, 1080/2))
 
     def handle_finally(self):
         pass

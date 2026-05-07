@@ -104,12 +104,6 @@
   "AreaJihuaTargetSelect": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaTargetSelect.jpg"
   },
-  "AreaLaunchButton": {
-    "rel_path": "imgs\\Windows\\UI\\AreaLaunchButton.png"
-  },
-  "AreaLoginOCR": {
-    "rel_path": "imgs\\Windows\\UI\\AreaLoginOCR.jpg"
-  },
   "AreaMaterialGetText": {
     "rel_path": "imgs\\Windows\\General\\AreaMaterialGetText.png"
   },
