@@ -122,9 +122,6 @@
   "AreaLoginAccountList": {
     "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginAccountList.png"
   },
-  "AreaLoginAccountLoginButton": {
-    "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginAccountLoginButton.png"
-  },
   "AreaLoginOCR": {
     "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginOCR.jpg"
   },

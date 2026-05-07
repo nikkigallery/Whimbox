@@ -4,7 +4,7 @@ from whimbox.ui.page_assets import *
 from whimbox.ui.ui_assets import *
 from whimbox.interaction.interaction_core import itt
 from whimbox.common.logger import logger
-from whimbox.common.utils.ui_utils import wait_until_appear_then_click
+from whimbox.common.utils.ui_utils import scroll_find_click, wait_until_appear_then_click
 from whimbox.common.utils.img_utils import similar_img
 from whimbox.task.common_task.enter_game_task import EnterGameTask
 
@@ -66,7 +66,7 @@ class ChangeAccountTask(TaskTemplate):
                 else:
                     cap = new_cap
         if len(self.finished_account_list) == 0:
-            wait_until_appear_then_click(TextLoginAccountLoginButton)
+            scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
             self.current_account = self.account_list[0]
         else:
             cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
@@ -77,7 +77,7 @@ class ChangeAccountTask(TaskTemplate):
                         if key not in self.finished_account_list:
                             AreaLoginAccountList.click(target_box=text_box_dict[key])
                             time.sleep(0.5)
-                            wait_until_appear_then_click(TextLoginAccountLoginButton)
+                            scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
                             self.current_account = key
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
                 itt.move_to(scroll_posi, anchor=AreaLoginAccountList.position.anchor)
@@ -104,5 +104,8 @@ class ChangeAccountTask(TaskTemplate):
         
 
 if __name__ == "__main__":
-    start_game_task = ChangeAccountTask(session_id="debug", account_list=[])
+    account_list=[]
+    finished_account_list=[]
+    start_game_task = ChangeAccountTask(session_id="debug", account_list=account_list, finished_account_list=finished_account_list)
     start_game_task.task_run()
+    print(account_list, finished_account_list)

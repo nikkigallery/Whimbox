@@ -395,7 +395,7 @@ class AllInOneTask(TaskTemplate):
 
     @register_step("切换账号")
     def step_change_account(self):
-        if self.game_already_started:
+        if self.game_already_started and len(self.account_list) == 0:
             if not self._quit_to_login():
                 self.log_to_gui("返回登录界面失败，只完成当前账号一条龙", is_error=True)
                 return
