@@ -65,10 +65,14 @@ class ChangeAccountTask(TaskTemplate):
                     break
                 else:
                     cap = new_cap
+            logger.info(f"账号列表: {self.account_list}")
+        
+        logger.info(f"已完成账号列表：{self.finished_account_list}")
         if len(self.finished_account_list) == 0:
             scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
             self.current_account = self.account_list[0]
         else:
+            self.current_account = ""
             cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
             while not self.need_stop():
                 text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList)
@@ -79,6 +83,9 @@ class ChangeAccountTask(TaskTemplate):
                             time.sleep(0.5)
                             scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
                             self.current_account = key
+                            break
+                if self.current_account:
+                    break
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
                 itt.move_to(scroll_posi, anchor=AreaLoginAccountList.position.anchor)
                 itt.middle_scroll(-15)
@@ -91,6 +98,7 @@ class ChangeAccountTask(TaskTemplate):
                 else:
                     cap = new_cap
 
+        logger.info(f"当前账号: {self.current_account}")
         self.log_to_gui("账号切换完毕，开始进入游戏")
         task_result = EnterGameTask(session_id=self.session_id).task_run()
         if task_result.status == STATE_TYPE_SUCCESS:

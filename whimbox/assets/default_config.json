@@ -84,6 +84,10 @@
             "value": "false",
             "description": "为所有账号运行一条龙"
         },
+        "auto_close_game": {
+            "value": "false",
+            "description": "一条龙结束后，关闭游戏"
+        },
         "start_magnet": {
             "value": "false",
             "description": "收集结晶时开启扇子套小技能"

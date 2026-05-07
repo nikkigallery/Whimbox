@@ -46,6 +46,7 @@ class AllInOneTask(TaskTemplate):
         self.pre_custom_step_results = []
         self.post_custom_step_results = []
         self.change_account_enabled = global_config.get_bool("OneDragon", "change_account", False)
+        self.auto_close_game_enabled = global_config.get_bool("OneDragon", "auto_close_game", False)
         self.account_list = []
         self.finished_account_list = []
         self.current_account = ""
@@ -72,17 +73,17 @@ class AllInOneTask(TaskTemplate):
                 continue
             step_id = str(raw_item.get("id") or "").strip()
             step_type = str(raw_item.get("type") or "").strip()
-            if not step_id or step_type not in ("path", "macro", "close_game"):
+            if not step_id or step_type not in ("path", "macro"):
                 continue
             script_name = str(raw_item.get("script_name") or "").strip()
-            if step_type in ("path", "macro") and not script_name:
+            if not script_name:
                 continue
             items.append(
                 {
                     "id": step_id,
                     "enabled": bool(raw_item.get("enabled", True)),
                     "type": step_type,
-                    "script_name": script_name if step_type in ("path", "macro") else "",
+                    "script_name": script_name,
                 }
             )
         return items
@@ -128,6 +129,10 @@ class AllInOneTask(TaskTemplate):
             step_order.append("step_finish_account")
 
         step_order.append("step8")
+
+        if self.auto_close_game_enabled:
+            step_order.append("step_close_game")
+            
         self.step_order = step_order
 
     def _reset_account_result_state(self):
@@ -179,7 +184,7 @@ class AllInOneTask(TaskTemplate):
             return f"执行跑图脚本：{script_name}" if script_name else "执行跑图脚本"
         if step_type == "macro":
             return f"执行宏脚本：{script_name}" if script_name else "执行宏脚本"
-        return "关闭游戏"
+        return f"不支持的步骤类型：{step_type}"
 
     def _run_custom_path(self, script_name):
         path_record = scripts_manager.query_path(path_name=script_name, return_one=True)
@@ -199,8 +204,6 @@ class AllInOneTask(TaskTemplate):
             return self._run_custom_path(step.get("script_name", ""))
         if step_type == "macro":
             return self._run_custom_macro(step.get("script_name", ""))
-        if step_type == "close_game":
-            return CloseGameTask(self.session_id).task_run()
         return TaskResult(status=STATE_TYPE_FAILED, message=f"不支持的步骤类型：{step_type}")
 
     def _format_default_summary_line(self, key, label):
@@ -465,6 +468,16 @@ class AllInOneTask(TaskTemplate):
                 "post_custom_steps": list(self.post_custom_step_results),
             },
         )
+
+    @register_step("关闭游戏")
+    def step_close_game(self):
+        task_result = CloseGameTask(self.session_id).task_run()
+        if task_result.status == STATE_TYPE_STOP:
+            self.update_task_result(status=STATE_TYPE_STOP, message=task_result.message or "任务已停止")
+            return STEP_NAME_FINISH
+        if task_result.status != STATE_TYPE_SUCCESS:
+            self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message or "关闭游戏失败")
+            return STEP_NAME_FINISH
 
     def handle_finally(self):
         # 有可能最后一步是关闭游戏，要额外判断一下避免finally时报错
