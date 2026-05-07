@@ -74,6 +74,9 @@
   "AreaEscEntrances": {
     "rel_path": "imgs\\Windows\\UI\\AreaEscEntrances.jpg"
   },
+  "AreaExitBackLoginButton": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaExitBackLoginButton.png"
+  },
   "AreaFishingDetection": {
     "rel_path": "imgs\\Windows\\Fishing\\AreaFishingDetection.jpg"
   },
@@ -101,8 +104,29 @@
   "AreaJihuaCostSelect": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaCostSelect.jpg"
   },
+  "AreaJihuaFirstMaterial": {
+    "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaFirstMaterial.png"
+  },
+  "AreaJihuaNumOrQualityChooseButton": {
+    "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaNumOrQualityChooseButton.png"
+  },
+  "AreaJihuaNumOrQualityChooseList": {
+    "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaNumOrQualityChooseList.png"
+  },
   "AreaJihuaTargetSelect": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\AreaJihuaTargetSelect.jpg"
+  },
+  "AreaLaunchButton": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaLaunchButton.png"
+  },
+  "AreaLoginAccountList": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginAccountList.png"
+  },
+  "AreaLoginAccountLoginButton": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginAccountLoginButton.png"
+  },
+  "AreaLoginOCR": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaLoginOCR.jpg"
   },
   "AreaMaterialGetText": {
     "rel_path": "imgs\\Windows\\General\\AreaMaterialGetText.png"
@@ -260,6 +284,12 @@
   "ButtonDungeonQuitOK": {
     "rel_path": "imgs\\Windows\\UI\\ButtonDungeonQuitOK.png"
   },
+  "ButtonExit": {
+    "rel_path": "imgs\\Windows\\UI\\login\\ButtonExit.png"
+  },
+  "ButtonExitLogout": {
+    "rel_path": "imgs\\Windows\\UI\\login\\ButtonExitLogout.png"
+  },
   "ButtonHuanjingCancel": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\ButtonHuanjingCancel.png"
   },
@@ -292,6 +322,12 @@
   },
   "ButtonJihuaNumMax": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\ButtonJihuaNumMax.png"
+  },
+  "ButtonJihuaSort": {
+    "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\ButtonJihuaSort.png"
+  },
+  "ButtonLogin": {
+    "rel_path": "imgs\\Windows\\UI\\login\\ButtonLogin.png"
   },
   "ButtonMinigameQuit": {
     "rel_path": "imgs\\Windows\\UI\\minigame\\ButtonMinigameQuit.png"
