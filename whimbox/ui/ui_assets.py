@@ -24,7 +24,7 @@ IconShopFeature = ImgIcon(print_log=LOG_NONE, threshold=0.99, anchor=ANCHOR_TOP_
 # IconPageLoginFeature = ImgIcon(print_log=LOG_ALL, threshold=0.90, hsv_limit=([0, 0, 220], [179, 50, 255]))
 AreaLoginOCR = Area(anchor=ANCHOR_BOTTOM_CENTER)
 AreaLaunchButton = Area()
-ButtonExit = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,30,250], [179,60,255]), anchor=ANCHOR_BOTTOM_LEFT)
+ButtonExit = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,30,230], [179,60,255]), anchor=ANCHOR_BOTTOM_LEFT)
 AreaExitBackLoginButton = Area(anchor=ANCHOR_CENTER)
 TextExitBackLoginButton = Text("返回登录", cap_area = AreaExitBackLoginButton)
 ButtonExitLogout = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,200], [179,80,255]), anchor=ANCHOR_TOP_RIGHT)
