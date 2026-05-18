@@ -201,7 +201,7 @@ IconMaterialTypeDig1 = ImgIcon(print_log=LOG_WHEN_TRUE)
 
 # 拍照相关
 IconPhotoFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.90, gray_limit=(250, 255), anchor=ANCHOR_RIGHT_CENTER)
-IconPhotoEdit = ImgIcon(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_RIGHT)
+IconPhotoEdit = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.97, anchor=ANCHOR_BOTTOM_RIGHT)
 ButtonPhotoDelete = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 ButtonPhotoDeleteConfirm = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_CENTER)
 
