@@ -18,6 +18,49 @@ class ChangeAccountTask(TaskTemplate):
     def _iter_text_box_by_y(self, text_box_dict):
         return sorted(text_box_dict.items(), key=lambda item: item[1][1])
 
+    def get_account_box_dict(self, cap=None, show_res=False, y_threshold=10):
+        text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList, cap=cap, show_res=show_res)
+        if not text_box_dict:
+            return {}
+
+        logger.info(f"账号列表OCR结果: {text_box_dict}")
+
+        text_boxes = []
+        for text, box in text_box_dict.items():
+            x1, y1, x2, y2 = [float(v) for v in box]
+            text_boxes.append({
+                "text": text,
+                "box": [x1, y1, x2, y2],
+                "x1": x1,
+                "y1": y1,
+            })
+
+        lines = []
+        for item in sorted(text_boxes, key=lambda item: item["y1"]):
+            for line in lines:
+                if abs(item["y1"] - line["y1"]) <= y_threshold:
+                    line["items"].append(item)
+                    line["y1"] = min(i["y1"] for i in line["items"])
+                    break
+            else:
+                lines.append({"y1": item["y1"], "items": [item]})
+
+        account_box_dict = {}
+        for line in lines:
+            items = sorted(line["items"], key=lambda item: item["x1"])
+            account = "".join(item["text"] for item in items).strip()
+            if not account or not account.isascii():
+                continue
+
+            x1 = min(item["box"][0] for item in items)
+            y1 = min(item["box"][1] for item in items)
+            x2 = max(item["box"][2] for item in items)
+            y2 = max(item["box"][3] for item in items)
+            account_box_dict[account] = [x1, y1, x2, y2]
+
+        logger.info(f"账号列表OCR合并结果: {account_box_dict}")
+        return account_box_dict
+
     @register_step("退出登录")
     def step_logout(self):
         itt.delay(3, comment="等待进入登录界面")
@@ -49,11 +92,10 @@ class ChangeAccountTask(TaskTemplate):
             self.log_to_gui("开始获取账号列表")
             cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
             while not self.need_stop():
-                text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList)
-                for key, _ in self._iter_text_box_by_y(text_box_dict):
-                    if '****' in key:
-                        if key not in self.account_list:
-                            self.account_list.append(key)
+                account_box_dict = self.get_account_box_dict()
+                for key, _ in self._iter_text_box_by_y(account_box_dict):
+                    if key not in self.account_list:
+                        self.account_list.append(key)
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
                 itt.move_to(scroll_posi, anchor=AreaLoginAccountList.position.anchor)
                 itt.middle_scroll(-15)
@@ -75,15 +117,14 @@ class ChangeAccountTask(TaskTemplate):
             self.current_account = ""
             cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
             while not self.need_stop():
-                text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList)
-                for key in text_box_dict.keys():
-                    if '****' in key:
-                        if key not in self.finished_account_list:
-                            AreaLoginAccountList.click(target_box=text_box_dict[key])
-                            time.sleep(0.5)
-                            scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
-                            self.current_account = key
-                            break
+                account_box_dict = self.get_account_box_dict()
+                for key, box in account_box_dict.items():
+                    if key not in self.finished_account_list:
+                        AreaLoginAccountList.click(target_box=box)
+                        time.sleep(0.5)
+                        scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
+                        self.current_account = key
+                        break
                 if self.current_account:
                     break
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
@@ -114,6 +155,11 @@ class ChangeAccountTask(TaskTemplate):
 if __name__ == "__main__":
     account_list=[]
     finished_account_list=[]
-    start_game_task = ChangeAccountTask(session_id="debug", account_list=account_list, finished_account_list=finished_account_list)
-    start_game_task.task_run()
+    task = ChangeAccountTask(session_id="debug", account_list=account_list, finished_account_list=finished_account_list)
+    task.task_run()
     print(account_list, finished_account_list)
+
+    # import cv2, os
+    # from whimbox.common.path_lib import ROOT_PATH
+    # cap = cv2.imread(os.path.join(ROOT_PATH, "..", "tools", "snapshot", "bug", "55.png"))
+    # task.get_account_box_dict(cap=cap, show_res=True)

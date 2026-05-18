@@ -111,13 +111,16 @@ class InteractionBGD:
         res = ocr.get_all_texts(cap, mode=0)
         return res
 
-    def ocr_and_detect_posi(self, area: posi_manager.Area, padding=50, hsv_limit=None):
-        cap = self.capture(anchor_posi=area.position)
+    def ocr_and_detect_posi(self, area: posi_manager.Area, padding=50, hsv_limit=None, cap=None, show_res=False):
+        if cap is None:
+            cap = self.capture(anchor_posi=area.position)
+        else:
+            cap = crop(cap, area.position)
         if hsv_limit:
             cap = process_with_hsv_limit(cap, hsv_limit[0], hsv_limit[1])
         if padding:
             cap = add_padding(cap, padding)
-        res = ocr.detect_and_ocr(cap)
+        res = ocr.detect_and_ocr(cap, show_res)
         if padding:
             for text, box in res.items():
                 res[text] = [
