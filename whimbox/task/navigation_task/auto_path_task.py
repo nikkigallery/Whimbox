@@ -10,6 +10,7 @@ from whimbox.view_and_move.move import *
 from whimbox.ability.ability import ability_manager
 from whimbox.action.pickup import PickupTask
 from whimbox.action.catch_insect import CatchInsectTask
+from whimbox.action.floral_insect import FloralInsectTask
 from whimbox.action.clean_animal import CleanAnimalTask
 from whimbox.action.fishing import FishingTask, FISHING_TYPE_MIRALAND, FISHING_TYPE_HOME
 from whimbox.common.scripts_manager import *
@@ -136,6 +137,7 @@ class AutoPathTask(TaskTemplate):
         action_to_ability_map = {
             ACTION_FLOURISH: ABILITY_NAME_FLOURISH,
             ACTION_CATCH_INSECT: ABILITY_NAME_INSECT,
+            ACTION_FLORAL_INSECT: ABILITY_NAME_INSECT,
             ACTION_CLEAN_ANIMAL: ABILITY_NAME_ANIMAL,
             ACTION_FISHING: ABILITY_NAME_FISH,
             ACTION_FISHING_STAR: ABILITY_NAME_STAR_COLLECT,
@@ -310,6 +312,13 @@ class AutoPathTask(TaskTemplate):
                         self.merge_material_count_dict(task_result.data)
                     else:
                         self.log_to_gui("测试跑图路线中，不进行捕虫")
+                        time.sleep(2)
+                elif self.target_point.action == ACTION_FLORAL_INSECT:
+                    if not self.path_info.test_mode:
+                        floral_insect_task = FloralInsectTask(self.session_id)
+                        task_result = floral_insect_task.task_run()
+                    else:
+                        self.log_to_gui("测试跑图路线中，不进行芳间巡游")
                         time.sleep(2)
                 elif self.target_point.action == ACTION_CLEAN_ANIMAL:
                     if not self.path_info.test_mode:
@@ -524,7 +533,7 @@ class AutoPathTask(TaskTemplate):
 
 if __name__ == "__main__":
     # task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
-    task = AutoPathTask(session_id="debug", path_name="伊地峡谷五个钓鱼点 ( 采集+捕虫 )")
+    task = AutoPathTask(session_id="debug", path_name="花套测试")
     task_result = task.task_run()
     print(task_result.to_dict())
 
