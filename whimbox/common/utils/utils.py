@@ -59,7 +59,8 @@ def is_admin():
         if sys.platform == 'win32':
             return ctypes.windll.shell32.IsUserAnAdmin()
         else:
-            return os.geteuid() == 0
+            # macOS uses Accessibility permissions rather than root/sudo to inject inputs
+            return True
     except Exception as e:
         logger.error(f"检查管理员权限失败: {e}")
         return False
