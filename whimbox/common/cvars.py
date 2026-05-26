@@ -77,7 +77,8 @@ ANGLE_NEGATIVE_X = 2
 ANGLE_NEGATIVE_XY = 3
 
 # Process name
-PROCESS_NAME = 'X6Game-Win64-Shipping.exe'
+PROCESS_NAME = None  # Resolved lazily via get_path_manager().get_process_name()
+
 
 # log
 LOG_NONE = 0

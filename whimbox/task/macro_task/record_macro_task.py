@@ -1,4 +1,4 @@
-﻿from whimbox.task.task_template import TaskTemplate, register_step
+from whimbox.task.task_template import TaskTemplate, register_step
 from whimbox.common.logger import logger
 from whimbox.common.scripts_manager import *
 from whimbox.common.utils.utils import save_json
@@ -7,8 +7,9 @@ from whimbox.common.handle_lib import HANDLE_OBJ
 
 from pynput import keyboard, mouse
 import time
-import win32gui
 import os
+
+from whimbox.platform.factory import get_window_manager
 
 
 class RecordMacroTask(TaskTemplate):
@@ -35,23 +36,20 @@ class RecordMacroTask(TaskTemplate):
         
     def _screen_to_window_position(self, screen_x: int, screen_y: int) -> tuple[int, int]:
         """将屏幕坐标转换为窗口内坐标（只对宽度归一化到1920）"""
-        hwnd = HANDLE_OBJ.get_handle()
-        if not hwnd:
+        mgr = get_window_manager()
+        handle = HANDLE_OBJ.get_handle()
+        if not handle:
             logger.warning("无法获取窗口句柄，使用屏幕坐标")
             return (screen_x, screen_y)
-        
-        # 获取窗口客户区在屏幕上的位置
-        rect = win32gui.GetClientRect(hwnd)
-        left, top = win32gui.ClientToScreen(hwnd, (rect[0], rect[1]))
-        
+
+        win_x, win_y, window_width, window_height = mgr.get_window_rect(
+            handle, HANDLE_OBJ.pid
+        )
+
         # 计算窗口内的相对坐标
-        window_x = screen_x - left
-        window_y = screen_y - top
-        
-        # 获取窗口实际大小
-        window_width = rect[2] - rect[0]
-        window_height = rect[3] - rect[1]
-        
+        window_x = screen_x - win_x
+        window_y = screen_y - win_y
+
         # 只对宽度归一化到 1920，高度保持原始比例
         if window_width > 0:
             normalized_x = int(window_x * 1920 / window_width)

@@ -1,27 +1,29 @@
 """一种更高效的d3d截图方式，不过需要手动维护缓冲池，暂时不使用"""
+import sys
 
-from whimbox.interaction.capture import Capture
-from whimbox.common.handle_lib import HANDLE_OBJ
-import asyncio
-from winsdk.windows.ai.machinelearning import LearningModelDevice, LearningModelDeviceKind
-from winsdk.windows.media.capture import MediaCapture
-from winsdk.windows.graphics.capture.interop import create_for_window
-from ctypes.wintypes import HWND
-from winsdk.windows.graphics.capture import (
-    Direct3D11CaptureFramePool,
-    Direct3D11CaptureFrame,
-)
-from winsdk.windows.graphics.directx import DirectXPixelFormat
-from winsdk.system import Object
-from winsdk.windows.graphics.imaging import (
-    SoftwareBitmap,
-    BitmapBufferAccessMode,
-    BitmapBuffer,
-)
-import threading
-import numpy as np
-from whimbox.common.logger import logger
-import cv2
+if sys.platform == 'win32':
+    from whimbox.interaction.capture import Capture
+    from whimbox.common.handle_lib import HANDLE_OBJ
+    import asyncio
+    from winsdk.windows.ai.machinelearning import LearningModelDevice, LearningModelDeviceKind
+    from winsdk.windows.media.capture import MediaCapture
+    from winsdk.windows.graphics.capture.interop import create_for_window
+    from ctypes.wintypes import HWND
+    from winsdk.windows.graphics.capture import (
+        Direct3D11CaptureFramePool,
+        Direct3D11CaptureFrame,
+    )
+    from winsdk.windows.graphics.directx import DirectXPixelFormat
+    from winsdk.system import Object
+    from winsdk.windows.graphics.imaging import (
+        SoftwareBitmap,
+        BitmapBufferAccessMode,
+        BitmapBuffer,
+    )
+    import threading
+    import numpy as np
+    from whimbox.common.logger import logger
+    import cv2
 
 # source code from https://github.com/Avasam/AutoSplit/blob/master/src/utils.py
 # and from https://github.com/pywinrt/python-winsdk/issues/11

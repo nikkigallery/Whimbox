@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
 ]
 
 dependencies = [
@@ -37,6 +38,11 @@ dependencies = [
     "psutil==7.1.0",
     "scipy==1.16.2",
     "win10toast==0.9",
+    # Cross-platform screen capture (used on macOS; lightweight on Windows too)
+    "mss>=9.0",
+    # macOS AppKit / Quartz bindings (no-op install on non-Apple platforms)
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
 ]
 
 [project.scripts]

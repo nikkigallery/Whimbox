@@ -5,6 +5,7 @@ import threading
 import time
 import cv2
 import os
+import sys
 import ctypes
 
 from whimbox.common import path_lib
@@ -25,18 +26,19 @@ else:
     raise ValueError(f"ocr配置错误：{ocr_type}")
 
 
-GetDC = ctypes.windll.user32.GetDC
-CreateCompatibleDC = ctypes.windll.gdi32.CreateCompatibleDC
-GetClientRect = ctypes.windll.user32.GetClientRect
-CreateCompatibleBitmap = ctypes.windll.gdi32.CreateCompatibleBitmap
-SelectObject = ctypes.windll.gdi32.SelectObject
-BitBlt = ctypes.windll.gdi32.BitBlt
-SRCCOPY = 0x00CC0020
-GetBitmapBits = ctypes.windll.gdi32.GetBitmapBits
-DeleteObject = ctypes.windll.gdi32.DeleteObject
-ReleaseDC = ctypes.windll.user32.ReleaseDC
-PostMessageW = ctypes.windll.user32.PostMessageW
-MapVirtualKeyW = ctypes.windll.user32.MapVirtualKeyW
+if sys.platform == 'win32':
+    GetDC = ctypes.windll.user32.GetDC
+    CreateCompatibleDC = ctypes.windll.gdi32.CreateCompatibleDC
+    GetClientRect = ctypes.windll.user32.GetClientRect
+    CreateCompatibleBitmap = ctypes.windll.gdi32.CreateCompatibleBitmap
+    SelectObject = ctypes.windll.gdi32.SelectObject
+    BitBlt = ctypes.windll.gdi32.BitBlt
+    SRCCOPY = 0x00CC0020
+    GetBitmapBits = ctypes.windll.gdi32.GetBitmapBits
+    DeleteObject = ctypes.windll.gdi32.DeleteObject
+    ReleaseDC = ctypes.windll.user32.ReleaseDC
+    PostMessageW = ctypes.windll.user32.PostMessageW
+    MapVirtualKeyW = ctypes.windll.user32.MapVirtualKeyW
 
 
 class InteractionBGD:
