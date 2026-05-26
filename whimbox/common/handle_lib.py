@@ -70,10 +70,23 @@ class ProcessHandler():
         if sys.platform == 'win32':
             return win32gui.GetForegroundWindow() == self.handle
         elif sys.platform == 'darwin':
+            if not self.pid:
+                return False
+                
+            from AppKit import NSWorkspace
             workspace = NSWorkspace.sharedWorkspace()
             front_app = workspace.frontmostApplication()
-            if front_app and self.app:
-                return front_app.processIdentifier() == self.app.processIdentifier()
+            if front_app and front_app.processIdentifier() == self.pid:
+                return True
+                
+            import Quartz
+            window_list = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
+            for window in window_list:
+                layer = window.get(Quartz.kCGWindowLayer, 0)
+                bounds = window.get(Quartz.kCGWindowBounds)
+                if layer == 0 and bounds and bounds.get('Height', 0) > 400 and bounds.get('Width', 0) > 400:
+                    # The first layer=0 large window in the list is the frontmost standard window!
+                    return window.get(Quartz.kCGWindowOwnerPID) == self.pid
             return False
     
     def is_minimized(self):
@@ -145,7 +158,20 @@ class ProcessHandler():
                 time.sleep(0.5)
                 if self.is_foreground():
                     return
-                raise Exception("无法将游戏窗口前置")
+                    
+                import subprocess
+                bundle_id = self.app.bundleIdentifier()
+                if bundle_id:
+                    subprocess.run(['osascript', '-e', f'tell application id "{bundle_id}" to activate'])
+                else:
+                    subprocess.run(['osascript', '-e', f'tell application "{self.app.localizedName()}" to activate'])
+                time.sleep(0.5)
+                if self.is_foreground():
+                    return
+                
+                front_app = NSWorkspace.sharedWorkspace().frontmostApplication()
+                front_name = front_app.localizedName() if front_app else 'None'
+                raise Exception(f"无法将游戏窗口前置，当前前置应用为: {front_name}")
             except Exception as e:
                 logger.error(e)
                 raise Exception("游戏窗口前置失败")
@@ -242,11 +268,13 @@ class ProcessHandler():
             if sys.platform == 'win32':
                 _, _, width, height = win32gui.GetClientRect(self.handle)
             elif sys.platform == 'darwin':
+                import Quartz
                 window_list = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
                 for window in window_list:
                     if window.get(Quartz.kCGWindowOwnerPID) == self.pid:
+                        layer = window.get(Quartz.kCGWindowLayer, 0)
                         bounds = window.get(Quartz.kCGWindowBounds)
-                        if bounds:
+                        if layer == 0 and bounds and bounds.get('Height', 0) > 100:
                             width = int(bounds.get('Width', 0))
                             height = int(bounds.get('Height', 0))
                             break

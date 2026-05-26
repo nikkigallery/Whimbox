@@ -18,7 +18,7 @@ elif sys.platform == 'darwin':
 class Capture():
     def __init__(self, hwnd_handler):
         self.hwnd_handler = hwnd_handler
-        self.capture_cache = np.zeros_like((1080,1920,3), dtype="uint8")
+        self.capture_cache = np.zeros((1080,1920,4), dtype="uint8")
         self.resolution = None
         self.max_fps = 30
         self.fps_timer = timer_module.Timer(diff_start_time=1)
@@ -124,6 +124,31 @@ class PrintWindowCapture(Capture):
             win32gui.ReleaseDC(hwnd, hdc_window)
             return img
         elif sys.platform == 'darwin':
+            import Quartz
+            window_list = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
+            bounds = None
+            pid = self.hwnd_handler.pid
+            if pid is not None:
+                for window in window_list:
+                    if window.get(Quartz.kCGWindowOwnerPID) == pid:
+                        layer = window.get(Quartz.kCGWindowLayer, 0)
+                        b = window.get(Quartz.kCGWindowBounds)
+                        if layer == 0 and b and b.get("Height", 0) > 100:
+                            bounds = b
+                            break
+            
+            if bounds:
+                # Add title bar height heuristic to crop it out if needed, but for now just capture window
+                monitor = {
+                    "top": int(bounds.get("Y", 0)),
+                    "left": int(bounds.get("X", 0)),
+                    "width": int(bounds.get("Width", 0)),
+                    "height": int(bounds.get("Height", 0))
+                }
+                if monitor["width"] > 0 and monitor["height"] > 0:
+                    sct_img = self.sct.grab(monitor)
+                    return np.array(sct_img)
+
             monitor = self.sct.monitors[1]
             sct_img = self.sct.grab(monitor)
             img = np.array(sct_img)
