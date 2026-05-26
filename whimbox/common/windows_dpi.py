@@ -15,6 +15,12 @@ def _enable_dpi_win32() -> None:
     """Windows-only implementation, called by WindowsPathManager.enable_dpi_awareness()."""
     global _dpi_awareness_initialized
 
+    import sys
+    if sys.platform == 'darwin':
+        _dpi_awareness_initialized = True
+        logger.info("已启用 DPI 感知: MacOS Retina Auto")
+        return
+
     if _dpi_awareness_initialized:
         return
 
