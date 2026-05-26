@@ -76,8 +76,11 @@ ANGLE_NEGATIVE_Y = 1
 ANGLE_NEGATIVE_X = 2
 ANGLE_NEGATIVE_XY = 3
 
-# Process name
-PROCESS_NAME = 'X6Game-Win64-Shipping.exe'
+import sys
+if sys.platform == 'darwin':
+    PROCESS_NAME = 'com.infoldgames.infinitynikkien'
+else:
+    PROCESS_NAME = 'X6Game-Win64-Shipping.exe'
 
 # log
 LOG_NONE = 0

@@ -1,6 +1,9 @@
 
 import os, json
-import win32gui, win32process, psutil, ctypes
+import sys
+if sys.platform == 'win32':
+    import win32gui, win32process, ctypes
+import psutil
 import numpy as np
 from collections import OrderedDict
 from typing import Union
@@ -52,7 +55,11 @@ def save_json(x, json_name, default_path, sort_keys=True):
 # verify administration
 def is_admin():
     try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
+        import sys
+        if sys.platform == 'win32':
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        else:
+            return os.geteuid() == 0
     except Exception as e:
         logger.error(f"检查管理员权限失败: {e}")
         return False

@@ -7,7 +7,7 @@ name = "whimbox"
 version = "2.4.3"
 description = "奇想盒-AI游戏助手"
 readme = "README.md"
-requires-python = "==3.12.8"
+requires-python = ">=3.12"
 license-files = ["LICENSE"]
 authors = [
     {name = "nikkigallery"}
@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS :: MacOS X",
 ]
 
 dependencies = [
@@ -32,11 +33,13 @@ dependencies = [
     "langchain-deepseek==1.0.1",
     "langchain-google-genai==4.2.2",
     "loguru==0.7.3",
-    "onnxruntime==1.19.0",
+    "onnxruntime>=1.19.0",
     "rapidocr==3.4.1",
     "psutil==7.1.0",
     "scipy==1.16.2",
-    "win10toast==0.9",
+    "win10toast==0.9; sys_platform == 'win32'",
+    "pyobjc>=10.0; sys_platform == 'darwin'",
+    "mss>=9.0",
 ]
 
 [project.scripts]

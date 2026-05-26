@@ -1,4 +1,4 @@
-﻿from whimbox.task.task_template import TaskTemplate, register_step
+from whimbox.task.task_template import TaskTemplate, register_step
 from whimbox.common.logger import logger
 from whimbox.common.scripts_manager import *
 from whimbox.common.utils.utils import save_json
@@ -40,18 +40,38 @@ class RecordMacroTask(TaskTemplate):
             logger.warning("无法获取窗口句柄，使用屏幕坐标")
             return (screen_x, screen_y)
         
-        # 获取窗口客户区在屏幕上的位置
-        rect = win32gui.GetClientRect(hwnd)
-        left, top = win32gui.ClientToScreen(hwnd, (rect[0], rect[1]))
-        
-        # 计算窗口内的相对坐标
-        window_x = screen_x - left
-        window_y = screen_y - top
-        
-        # 获取窗口实际大小
-        window_width = rect[2] - rect[0]
-        window_height = rect[3] - rect[1]
-        
+        import sys
+        if sys.platform == 'win32':
+            # 获取窗口客户区在屏幕上的位置
+            rect = win32gui.GetClientRect(hwnd)
+            left, top = win32gui.ClientToScreen(hwnd, (rect[0], rect[1]))
+            
+            # 计算窗口内的相对坐标
+            window_x = screen_x - left
+            window_y = screen_y - top
+            
+            # 获取窗口实际大小
+            window_width = rect[2] - rect[0]
+            window_height = rect[3] - rect[1]
+        else:
+            import Quartz
+            window_x = screen_x
+            window_y = screen_y
+            window_width = 1920
+            window_height = 1080
+            app_pid = HANDLE_OBJ.pid
+            if app_pid:
+                window_list = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
+                for window in window_list:
+                    if window.get(Quartz.kCGWindowOwnerPID) == app_pid:
+                        bounds = window.get(Quartz.kCGWindowBounds)
+                        if bounds:
+                            window_width = int(bounds.get('Width', 1920))
+                            window_height = int(bounds.get('Height', 1080))
+                            window_x = screen_x - int(bounds.get('X', 0))
+                            window_y = screen_y - int(bounds.get('Y', 0))
+                            break
+
         # 只对宽度归一化到 1920，高度保持原始比例
         if window_width > 0:
             normalized_x = int(window_x * 1920 / window_width)

@@ -10,6 +10,12 @@ def enable_dpi_awareness() -> None:
     """Enable DPI awareness early to avoid Windows coordinate virtualization."""
     global _dpi_awareness_initialized
 
+    import sys
+    if sys.platform == 'darwin':
+        _dpi_awareness_initialized = True
+        logger.info("已启用 DPI 感知: MacOS Retina Auto")
+        return
+
     if _dpi_awareness_initialized:
         return
 

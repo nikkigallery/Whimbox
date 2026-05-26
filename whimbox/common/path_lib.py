@@ -1,5 +1,5 @@
 import os
-import win32api, win32con
+import sys
 import configparser
 
 ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,20 +13,30 @@ LOG_PATH = os.path.join(os.getcwd(), 'logs')
 SCRIPT_PATH = os.path.join(os.getcwd(), 'scripts')
 PLUGINS_PATH = os.path.join(ROOT_PATH, 'plugins')
 
+if sys.platform == 'win32':
+    import win32api, win32con
+
 def find_game_launcher_folder():
+    if sys.platform == 'darwin':
+        return "/Applications/Infinity Nikki.app"
+
     # HKEY_CURRENT_USER\Software\InfinityNikki Launcher
     path = ""
-    key = 'Software\\InfinityNikki Launcher'
-    try:
-        key = win32api.RegOpenKey(win32con.HKEY_CURRENT_USER, key, 0, win32con.KEY_READ)
-        path, _ = win32api.RegQueryValueEx(key, "")  # 读取默认值
-        win32api.RegCloseKey(key)
-    except Exception as e:
-        path = ""
+    if sys.platform == 'win32':
+        key = 'Software\\InfinityNikki Launcher'
+        try:
+            key = win32api.RegOpenKey(win32con.HKEY_CURRENT_USER, key, 0, win32con.KEY_READ)
+            path, _ = win32api.RegQueryValueEx(key, "")  # 读取默认值
+            win32api.RegCloseKey(key)
+        except Exception as e:
+            path = ""
     
     return path
 
 def find_game_folder():
+    if sys.platform == 'darwin':
+        return "/Applications/Infinity Nikki.app"
+
     user_home = os.path.expanduser('~')
     config_path = os.path.join(user_home, 'AppData', 'Local', 'InfinityNikki Launcher', 'config.ini')
     if not os.path.exists(config_path):
@@ -39,8 +49,6 @@ def find_game_folder():
         except (KeyError, configparser.NoSectionError):
             return ""
 
-
 if __name__ == "__main__":
     print(find_game_launcher_folder())
     print(find_game_folder())
-

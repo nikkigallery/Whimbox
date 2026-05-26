@@ -1,7 +1,11 @@
 import string
 from whimbox.interaction.vkcode import VK_CODE
-import ctypes
-VkKeyScanA = ctypes.windll.user32.VkKeyScanA
+import sys
+if sys.platform == 'win32':
+    import ctypes
+    VkKeyScanA = ctypes.windll.user32.VkKeyScanA
+else:
+    VkKeyScanA = None
 
 class InteractionTemplate():
     def __init__(self):
@@ -50,8 +54,11 @@ class InteractionTemplate():
             int: 虚拟按键码
         """
         if len(key) == 1 and key in string.printable:
-            # https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscana
-            return VkKeyScanA(ord(key)) & 0xff
+            if sys.platform == 'win32':
+                return VkKeyScanA(ord(key)) & 0xff
+            else:
+                # Basic fallback for macOS printable chars (mac uses different keycodes, relying on manual mapping)
+                return ord(key.upper()) # Not perfectly accurate for all mac keys, but a placeholder.
         else:
             key = key.lower()
             return VK_CODE[key]
