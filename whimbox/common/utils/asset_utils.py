@@ -91,7 +91,9 @@ class AssetBase():
 
     def get_img_path(self):
         if self.name in ASSETS_INDEX_JSON:
-            return os.path.join(ASSETS_PATH, ASSETS_INDEX_JSON[self.name]['rel_path'])
+            rel_path = ASSETS_INDEX_JSON[self.name]['rel_path']
+            rel_path = rel_path.replace('\\', os.sep)
+            return os.path.join(ASSETS_PATH, rel_path)
         r = self.search_path(self.name)
         if r != None:
             return r

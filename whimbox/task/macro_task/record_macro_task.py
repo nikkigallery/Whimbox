@@ -7,7 +7,9 @@ from whimbox.common.handle_lib import HANDLE_OBJ
 
 from pynput import keyboard, mouse
 import time
-import win32gui
+import sys
+if sys.platform == 'win32':
+    import win32gui
 import os
 
 
