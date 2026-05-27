@@ -37,7 +37,7 @@ class WindowsPathManager(PathManager):
         try:
             config = configparser.ConfigParser()
             config.read(config_path, encoding='utf-8')
-            return config['User']['GameInstallPath']
+            return config['Download']['gameDir']
         except (KeyError, configparser.NoSectionError):
             return ''
 

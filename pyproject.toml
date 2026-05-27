@@ -37,9 +37,9 @@ dependencies = [
     "rapidocr==3.4.1",
     "psutil==7.1.0",
     "scipy==1.16.2",
-    "win10toast==0.9",
-    # Cross-platform screen capture (used on macOS; lightweight on Windows too)
-    "mss>=9.0",
+    "win10toast==0.9; sys_platform == 'win32'",
+    # Cross-platform screen capture (used on macOS)
+    "mss>=9.0; sys_platform == 'darwin'",
     # macOS AppKit / Quartz bindings (no-op install on non-Apple platforms)
     "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",

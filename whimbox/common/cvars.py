@@ -77,7 +77,11 @@ ANGLE_NEGATIVE_X = 2
 ANGLE_NEGATIVE_XY = 3
 
 # Process name
-PROCESS_NAME = None  # Resolved lazily via get_path_manager().get_process_name()
+def get_process_name() -> str:
+    from whimbox.platform.factory import get_path_manager
+    return get_path_manager().get_process_name()
+
+PROCESS_NAME = get_process_name()
 
 
 # log
