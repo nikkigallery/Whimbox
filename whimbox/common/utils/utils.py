@@ -52,7 +52,8 @@ def save_json(x, json_name, default_path, sort_keys=True):
 # verify administration
 def is_admin():
     try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
+        from whimbox.platform.factory import get_path_manager
+        return get_path_manager().is_admin()
     except Exception as e:
         logger.error(f"检查管理员权限失败: {e}")
         return False
