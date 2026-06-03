@@ -1,6 +1,11 @@
+"""Cross-platform path constants and game directory helpers.
+
+Specific path resolution (registry keys, macOS app bundle paths) is
+delegated to the PathManager from the platform factory.
+"""
 import os
-import win32api, win32con
-import configparser
+
+from whimbox.platform.factory import get_path_manager
 
 ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -13,34 +18,17 @@ LOG_PATH = os.path.join(os.getcwd(), 'logs')
 SCRIPT_PATH = os.path.join(os.getcwd(), 'scripts')
 PLUGINS_PATH = os.path.join(ROOT_PATH, 'plugins')
 
-def find_game_launcher_folder():
-    # HKEY_CURRENT_USER\Software\InfinityNikki Launcher
-    path = ""
-    key = 'Software\\InfinityNikki Launcher'
-    try:
-        key = win32api.RegOpenKey(win32con.HKEY_CURRENT_USER, key, 0, win32con.KEY_READ)
-        path, _ = win32api.RegQueryValueEx(key, "")  # 读取默认值
-        win32api.RegCloseKey(key)
-    except Exception as e:
-        path = ""
-    
-    return path
 
-def find_game_folder():
-    user_home = os.path.expanduser('~')
-    config_path = os.path.join(user_home, 'AppData', 'Local', 'InfinityNikki Launcher', 'config.ini')
-    if not os.path.exists(config_path):
-        return ""
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = configparser.ConfigParser()
-        config.read_file(f)
-        try:
-            return config['Download']['gameDir']
-        except (KeyError, configparser.NoSectionError):
-            return ""
+def find_game_launcher_folder() -> str:
+    """Return the game launcher folder path for the current platform."""
+    return get_path_manager().find_game_launcher_folder()
+
+
+def find_game_folder() -> str:
+    """Return the installed game folder path for the current platform."""
+    return get_path_manager().find_game_folder()
 
 
 if __name__ == "__main__":
     print(find_game_launcher_folder())
     print(find_game_folder())
-

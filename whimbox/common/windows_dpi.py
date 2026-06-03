@@ -1,3 +1,8 @@
+"""DPI awareness helper.
+
+On Windows, calls the PathManager to enable per-monitor DPI awareness.
+On macOS, this is a no-op — the PathManager handles it transparently.
+"""
 import ctypes
 
 from whimbox.common.logger import logger
@@ -6,8 +11,8 @@ from whimbox.common.logger import logger
 _dpi_awareness_initialized = False
 
 
-def enable_dpi_awareness() -> None:
-    """Enable DPI awareness early to avoid Windows coordinate virtualization."""
+def _enable_dpi_win32() -> None:
+    """Windows-only implementation, called by WindowsPathManager.enable_dpi_awareness()."""
     global _dpi_awareness_initialized
 
     if _dpi_awareness_initialized:
@@ -45,3 +50,12 @@ def enable_dpi_awareness() -> None:
         pass
 
     logger.warning("未能启用 DPI 感知，截图可能受系统缩放影响")
+
+
+def enable_dpi_awareness() -> None:
+    """Enable DPI awareness early to avoid Windows coordinate virtualisation.
+
+    Delegates to the platform PathManager so that macOS receives a no-op.
+    """
+    from whimbox.platform.factory import get_path_manager
+    get_path_manager().enable_dpi_awareness()
