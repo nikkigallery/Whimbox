@@ -1,4 +1,4 @@
-﻿
+
 from whimbox.task.task_template import *
 from whimbox.config.config import global_config
 from whimbox.common.path_lib import find_game_launcher_folder
@@ -21,6 +21,27 @@ class StartGameTask(TaskTemplate):
         # 判断游戏是否已经在运行
         HANDLE_OBJ.refresh_handle()
         if HANDLE_OBJ.get_handle():
+            return
+        
+        import sys
+        if sys.platform == "darwin":
+            self.log_to_gui("macOS系统，直接启动游戏")
+            import subprocess
+            launcher_path = global_config.get("Whimbox", "launcher_path")
+            if not launcher_path:
+                launcher_path = find_game_launcher_folder()
+            
+            try:
+                if not os.path.exists(launcher_path):
+                    self.task_stop("游戏路径不存在，请手动打开游戏或在奇想盒设置中设置")
+                    return
+                subprocess.Popen(["open", launcher_path])
+            except Exception as e:
+                logger.error(f"启动游戏失败: {e}")
+                self.task_stop(f"打开游戏失败, 请手动打开游戏")
+                return
+            
+            self.log_to_gui("已发送启动命令，等待游戏运行")
             return
         
         # 判断启动器是否已经在运行
