@@ -37,6 +37,11 @@ class MacOSWindowManager(WindowManager):
     def is_foreground(self, native_handle: Any, pid: Optional[int]) -> bool:
         if native_handle is None or not pid:
             return False
+            
+        # Spin the runloop briefly so NSWorkspace updates its state in asyncio contexts
+        from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.001, False)
+        
         workspace = NSWorkspace.sharedWorkspace()
         front_app = workspace.frontmostApplication()
         if front_app and front_app.processIdentifier() == pid:
