@@ -60,20 +60,30 @@ class MacOSWindowManager(WindowManager):
     def set_foreground(self, native_handle: Any, pid: Optional[int], process_name: Optional[str]) -> None:
         if not self.is_alive(native_handle):
             raise Exception("游戏窗口不存在")
+            
+        def _wait_for_foreground(timeout: float = 3.0) -> bool:
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if self.is_foreground(native_handle, pid):
+                    return True
+                time.sleep(0.2)
+            return False
+
         try:
             native_handle.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
-            time.sleep(0.5)
-            if self.is_foreground(native_handle, pid):
+            if _wait_for_foreground(1.5):
                 return
+                
             bundle_id = native_handle.bundleIdentifier()
             if bundle_id:
                 subprocess.run(['osascript', '-e', f'tell application id "{bundle_id}" to activate'])
             else:
                 name = native_handle.localizedName()
                 subprocess.run(['osascript', '-e', f'tell application "{name}" to activate'])
-            time.sleep(0.5)
-            if self.is_foreground(native_handle, pid):
+                
+            if _wait_for_foreground(3.0):
                 return
+                
             front_app = NSWorkspace.sharedWorkspace().frontmostApplication()
             front_name = front_app.localizedName() if front_app else 'None'
             raise Exception(f"无法将游戏窗口前置，当前前置应用为: {front_name}")
