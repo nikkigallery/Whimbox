@@ -52,6 +52,10 @@ def main():
     if len(sys.argv) > 1:
         if sys.argv[1] == "startOneDragon":
             run_one_dragon()
+        elif sys.argv[1] == "smokeTest":
+            _prepare()
+            logger.info("Smoke test passed successfully!")
+            sys.exit(0)
         else:
             run_whimbox()
     else:
