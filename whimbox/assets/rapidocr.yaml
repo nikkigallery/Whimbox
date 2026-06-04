@@ -69,7 +69,7 @@ Det:
     engine_type: "onnxruntime"
     lang_type: "ch"
     model_type: "mobile"
-    ocr_version: "PP-OCRv5"
+    ocr_version: "PP-OCRv4"
 
     task_type: "det"
 
@@ -108,7 +108,7 @@ Rec:
     engine_type: "onnxruntime"
     lang_type: "ch"
     model_type: "mobile"
-    ocr_version: "PP-OCRv5"
+    ocr_version: "PP-OCRv4"
 
     task_type: "rec"
 
