@@ -47,10 +47,10 @@ logger.add(
     os.path.join(LOG_PATH, log_file_prefix + "{time:YYYY-MM-DD}.log"),
     level="TRACE",
     backtrace=True,
-    enqueue=True,
+    enqueue=False,
 )
 if DEBUG_MODE:
-    logger.add(sys.stdout, level="TRACE", backtrace=True, enqueue=True)
+    logger.add(sys.stdout, level="TRACE", backtrace=True, enqueue=False)
 
 def hr(title, level=3):
     title = str(title).upper()
