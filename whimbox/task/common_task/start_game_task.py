@@ -31,6 +31,11 @@ class StartGameTask(TaskTemplate):
             if not launcher_path:
                 launcher_path = find_game_launcher_folder()
             
+            if launcher_path.lower().endswith("launcher.exe"):
+                launcher_path = os.path.dirname(launcher_path)
+            if launcher_path.endswith("Infinity Nikki") or launcher_path.endswith("無限暖暖") or launcher_path.endswith("无限暖暖"):
+                launcher_path = launcher_path + ".app"
+            
             try:
                 if not os.path.exists(launcher_path):
                     self.task_stop("游戏路径不存在，请手动打开游戏或在奇想盒设置中设置")

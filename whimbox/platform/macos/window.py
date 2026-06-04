@@ -22,11 +22,17 @@ class MacOSWindowManager(WindowManager):
         for app in workspace.runningApplications():
             if pid is not None and app.processIdentifier() == pid:
                 return app
-            if process_name is not None and (
-                app.bundleIdentifier() == process_name
-                or app.localizedName() == process_name
-            ):
-                return app
+            if process_name is not None:
+                b_id = app.bundleIdentifier()
+                l_name = app.localizedName()
+                if b_id == process_name or l_name == process_name:
+                    return app
+                # Fallbacks for Infinity Nikki variants (CN/Global/etc)
+                if process_name == 'com.infoldgames.infinitynikkien':
+                    if b_id and (b_id.startswith('com.infoldgames.infinitynikki') or b_id.startswith('com.papegames.infinitynikki')):
+                        return app
+                    if l_name in ('Infinity Nikki', '無限暖暖', '无限暖暖'):
+                        return app
         return None
 
     def get_pid(self, native_handle: Any, process_name: Optional[str]) -> Optional[int]:
