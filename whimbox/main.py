@@ -6,8 +6,19 @@ from whimbox.common.windows_dpi import enable_dpi_awareness
 
 def _clear_temp_file():
     logger.info("清理上次运行产生的临时文件")
-    from whimbox.agent_workspace.tools import clear_screenshot_cache
-    clear_screenshot_cache()
+    import shutil
+    import os
+    from pathlib import Path
+    screenshot_dir = Path(os.getcwd()) / "logs" / "screenshot"
+    if screenshot_dir.exists():
+        for entry in screenshot_dir.iterdir():
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+            except OSError:
+                continue
 
 def _prepare():
     enable_dpi_awareness()
@@ -21,7 +32,6 @@ def _prepare():
     except PackageNotFoundError:
         logger.info(f"奇想盒后台版本号: dev")
     _clear_temp_file()
-
 
 def run_whimbox():
     _prepare()
@@ -49,6 +59,9 @@ def run_one_dragon():
     logger.info("任务结束，程序退出")
 
 def main():
+    import multiprocessing
+    multiprocessing.freeze_support()
+    
     if len(sys.argv) > 1:
         if sys.argv[1] == "startOneDragon":
             run_one_dragon()
