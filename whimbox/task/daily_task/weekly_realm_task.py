@@ -1,22 +1,43 @@
 ﻿# 每周幻境
 
+import json
+import os
+
 from whimbox.task.task_template import *
+from whimbox.common.path_lib import ASSETS_PATH
 from whimbox.ui.page_assets import page_daily_task, page_huanjing_weekly
 from whimbox.ui.ui import ui_control
 from whimbox.interaction.interaction_core import itt
 from whimbox.ui.ui_assets import *
 from whimbox.common.utils.ui_utils import *
 
+
+def _load_realm_options():
+    try:
+        path = os.path.join(ASSETS_PATH, "setting_options.json")
+        with open(path, "r", encoding="utf-8") as f:
+            options = json.load(f).get("realm_target", [])
+        return [item for item in options if item not in ("全部", "不做周本")]
+    except Exception:
+        return ["奇格格达", "卷卷"]
+
+
+def _normalize_realm_targets(realm_target):
+    all_targets = _load_realm_options()
+    if isinstance(realm_target, list):
+        return [item for item in realm_target if item in all_targets]
+    if realm_target == "全部":
+        return all_targets
+    if realm_target == "不做周本" or not realm_target:
+        return []
+    return [realm_target] if realm_target in all_targets else []
+
+
 class WeeklyRealmTask(TaskTemplate):
     def __init__(self, session_id):
         super().__init__(session_id=session_id, name="weekly_realm_task")
         realm_target = global_config.get("OneDragon", "realm_target")
-        if realm_target == "全部":
-            self.realm_target = ["奇格格达", "卷卷"]
-        elif realm_target == "不做周本":
-            self.realm_target = []
-        else:
-            self.realm_target = [realm_target]
+        self.realm_target = _normalize_realm_targets(realm_target)
 
     @register_step("检查周本完成情况")
     def step1(self):

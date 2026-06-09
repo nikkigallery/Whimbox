@@ -219,6 +219,8 @@ def _load_material_options() -> list[str]:
 def _infer_config_type(value: Any) -> str:
     if isinstance(value, bool):
         return "boolean"
+    if isinstance(value, list):
+        return "array"
     if isinstance(value, (int, float)):
         return "number"
     if isinstance(value, str):

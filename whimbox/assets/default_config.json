@@ -129,7 +129,10 @@
             "description": "魔物试炼幻境的默认目标"
         },
         "realm_target": {
-            "value": "全部",
+            "value": [
+                "奇格格达",
+                "卷卷"
+            ],
             "description": "周本的默认目标"
         },
         "ability_plan": {

@@ -70,6 +70,15 @@ class GlobalConfig:
                             old_value = user_config[section_name][key]['value']
                             if old_value in key_name_mapping:
                                 user_config[section_name][key]['value'] = key_name_mapping[old_value]
+                        if section_name == 'OneDragon' and key == 'realm_target' and 'value' in user_config[section_name][key]:
+                            old_value = user_config[section_name][key]['value']
+                            if isinstance(old_value, str):
+                                if old_value == '全部':
+                                    user_config[section_name][key]['value'] = list(config_item.get('value', []))
+                                elif old_value == '不做周本' or not old_value:
+                                    user_config[section_name][key]['value'] = []
+                                else:
+                                    user_config[section_name][key]['value'] = [old_value]
             
             # 删除已经不存在的配置项
             sections_to_delete = [section_name for section_name in user_config 
