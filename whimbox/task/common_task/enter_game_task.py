@@ -46,3 +46,8 @@ class EnterGameTask(TaskTemplate):
     
     def handle_finally(self):
         pass
+    
+if __name__ == "__main__":
+    task = EnterGameTask(session_id="debug")
+    result = task.task_run()
+    print(result)
