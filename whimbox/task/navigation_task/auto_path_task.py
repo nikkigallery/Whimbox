@@ -13,11 +13,29 @@ from whimbox.action.catch_insect import CatchInsectTask
 from whimbox.action.floral_insect import FloralInsectTask
 from whimbox.action.clean_animal import CleanAnimalTask
 from whimbox.action.fishing import FishingTask, FISHING_TYPE_MIRALAND, FISHING_TYPE_HOME
+from whimbox.common.base_threading import BaseThreading
+from whimbox.common.keybind import keybind
 from whimbox.common.scripts_manager import *
 from whimbox.map.convert import convert_GameLoc_to_PngMapPx
 from whimbox.ui.ui import ui_control
 from whimbox.ui.page_assets import *
 from whimbox.ability.cvar import *
+
+
+class AutoPathClickSkipMonitor(BaseThreading):
+    """自动跑图期间轻量检测跳过按钮。"""
+
+    def __init__(self):
+        super().__init__("auto_path_click_skip_monitor")
+        self.while_sleep = 0.2
+        self.last_key_press_time = 0
+
+    def loop(self):
+        if not itt.get_img_existence(IconClickSkip):
+            return
+        else:
+            time.sleep(0.1)
+            itt.key_press(keybind.KEYBIND_INTERACTION)
 
 
 class AutoPathTask(TaskTemplate):
@@ -65,6 +83,7 @@ class AutoPathTask(TaskTemplate):
         # 动作控制器线程
         self.move_controller = None
         self.jump_controller = None
+        self.click_skip_monitor = None
 
         # 一些常量
         self.walk2jump_stop_time = 0.5
@@ -160,8 +179,11 @@ class AutoPathTask(TaskTemplate):
         # 启动动作控制线程
         self.jump_controller = JumpController()
         self.move_controller = MoveController()
+        self.click_skip_monitor = AutoPathClickSkipMonitor()
+        self.click_skip_monitor.add_stop_func(self.need_stop)
         self.jump_controller.start_threading()
         self.move_controller.start_threading()
+        self.click_skip_monitor.start_threading()
         # 初始化能力盘
         self.log_to_gui("初始化能力轮盘")
         need_ability_list = self.get_need_ability_list()
@@ -504,6 +526,11 @@ class AutoPathTask(TaskTemplate):
         self.current_game_move_mode = MOVE_MODE_WALK
         self.once_loop_time = 0
 
+        if self.click_skip_monitor is not None:
+            self.click_skip_monitor.stop_threading()
+            self.click_skip_monitor.join()
+            self.click_skip_monitor = None
+
         self.stop_move()
         self.change_to_walk()
         if self.jump_controller is not None and self.move_controller is not None:
@@ -533,7 +560,7 @@ class AutoPathTask(TaskTemplate):
 
 if __name__ == "__main__":
     # task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
-    task = AutoPathTask(session_id="debug", path_name="花套测试")
+    task = AutoPathTask(session_id="debug", path_name="星海拾光_星光结晶收集_星梦群屿")
     task_result = task.task_run()
     print(task_result.to_dict())
 

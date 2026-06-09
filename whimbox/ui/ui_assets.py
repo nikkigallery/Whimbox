@@ -64,7 +64,7 @@ IconPickupFeature = ImgIcon(print_log=LOG_NONE, threshold=0.75, gray_limit=(210,
 IconSetdownFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.75, gray_limit=(210, 255))
 IconTalkFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.75, gray_limit=(210, 255))
 IconSkip = ImgIcon(print_log=LOG_NONE, threshold=0.73, gray_limit=(210, 255), anchor=ANCHOR_BOTTOM_RIGHT)
-IconClickSkip = ImgIcon(print_log=LOG_ALL, threshold=0.80, gray_limit=(210, 255), anchor=ANCHOR_BOTTOM_RIGHT)
+IconClickSkip = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.80, gray_limit=(210, 255), anchor=ANCHOR_BOTTOM_RIGHT)
 AreaDialogSelection = Area(anchor=ANCHOR_RIGHT_CENTER)
 IconSkipDialog = ImgIcon(print_log=LOG_NONE, threshold=0.73, gray_limit=(210, 255), anchor=ANCHOR_BOTTOM_RIGHT)
 IconMovementWalk = ImgIcon(print_log=LOG_NONE, threshold=0.85, hsv_limit=([0, 0, 210], [180, 50, 255]), anchor=ANCHOR_BOTTOM_RIGHT)
