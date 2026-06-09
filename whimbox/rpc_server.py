@@ -580,6 +580,9 @@ def _error_response(
 
 
 async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
+    if method == "agent.status":
+        return whimbox_agent.get_status()
+
     if method == "agent.send_message":
         session_id = params.get("session_id", "default")
         message = params.get("message", "")

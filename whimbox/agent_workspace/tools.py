@@ -8,12 +8,10 @@ import uuid
 from threading import Event
 from pathlib import Path
 
-import cv2
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
-from whimbox.interaction.interaction_core import itt
 from whimbox.tool_invocation_coordinator import tool_invocation_coordinator
 from whimbox.common.path_lib import LOG_PATH
 
@@ -224,6 +222,9 @@ def build_workspace_tools(
                 screenshot_dir = get_screenshot_cache_dir()
                 screenshot_path = screenshot_dir / f"{session_id or 'default'}_{uuid.uuid4().hex}.png"
                 try:
+                    import cv2
+                    from whimbox.interaction.interaction_core import itt
+
                     image = itt.capture()
                     cv2.imwrite(str(screenshot_path), image)
                     resolved_path = str(screenshot_path)

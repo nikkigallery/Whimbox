@@ -11,6 +11,7 @@ from whimbox.agent_workspace.session import MessageContent, content_to_model_con
 from whimbox.agent_workspace.tools import build_workspace_tools
 from whimbox.common.logger import logger
 from whimbox.config.config import global_config
+from whimbox.event_bus import emit_event
 from whimbox.plugin_runtime import get_registry
 from whimbox.plugin_tools import build_tools
 from whimbox.common.cvars import DEBUG_MODE
@@ -43,6 +44,7 @@ class Agent:
         self._session_stream_tasks = {}
         self._consolidation_locks = {}
         self._consolidation_tasks = {}
+        self._status = "starting"
         self.workspace = AgentWorkspace()
         self.context_builder = None
         self.memory_store = None
@@ -52,12 +54,24 @@ class Agent:
 
         self._initialized = True
 
+    def _set_status(self, status: str, message: str = "") -> None:
+        self._status = status
+        self.err_msg = message
+        emit_event("event.agent.status", self.get_status())
+
+    def get_status(self) -> dict[str, Any]:
+        return {
+            "ready": self.langchain_agent is not None,
+            "status": self._status,
+            "message": self.err_msg,
+        }
+
     def _get_active_stop_event(self):
         return self._session_stop_events.get(self._active_session_id)
 
     async def start(self):
         logger.info("开始初始化agent")
-        self.err_msg = "准备中，请稍等..."
+        self._set_status("starting", "AI助手正在启动，请稍等...")
         self.workspace.ensure()
         if self.context_builder is None:
             self.context_builder = ContextBuilder(self.workspace.root)
@@ -70,9 +84,10 @@ class Agent:
         api_key = global_config.get("Agent", "api_key")
         if not api_key:
             self.langchain_agent = None
-            self.err_msg = "请先前往设置，配置大模型的api密钥。不会配置？点开通知，里面有详细白嫖教程！"
+            err_msg = "请先前往设置，配置大模型的api密钥。不会配置？点开通知，里面有详细白嫖教程！"
             self.llm = None
-            logger.error(self.err_msg)
+            self._set_status("missing_api_key", err_msg)
+            logger.error(err_msg)
         else:
             try:
                 self._model_name = str(global_config.get("Agent", "model") or "")
@@ -87,8 +102,9 @@ class Agent:
                 )
             except Exception:
                 self.llm = None
-                self.err_msg = "AI初始化失败。请前往设置，检查大模型相关配置。"
-                logger.error(self.err_msg)
+                err_msg = "AI初始化失败。请前往设置，检查大模型相关配置。"
+                self._set_status("error", err_msg)
+                logger.error(err_msg)
 
         self._rebuild_tools()
         logger.info("agent tools准备就绪")
@@ -99,10 +115,12 @@ class Agent:
                 tools=self.tools,
                 # debug=DEBUG_MODE,
             )
-            self.err_msg = ""
+            self._set_status("ready", "")
             logger.info("AGENT 初始化完成")
         else:
             self.langchain_agent = None
+            if self._status == "starting":
+                self._set_status("error", "AI助手初始化失败")
             logger.error("AGENT 初始化失败")
 
     def is_ready(self):

@@ -1,13 +1,25 @@
 import asyncio
 import sys
+import shutil
+from pathlib import Path
 
 from whimbox.common.logger import logger
 from whimbox.common.windows_dpi import enable_dpi_awareness
 
+
 def _clear_temp_file():
     logger.info("清理上次运行产生的临时文件")
-    from whimbox.agent_workspace.tools import clear_screenshot_cache
-    clear_screenshot_cache()
+    from whimbox.common.path_lib import LOG_PATH
+    screenshot_dir = Path(LOG_PATH) / "screenshot"
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    for entry in screenshot_dir.iterdir():
+        try:
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        except OSError:
+            continue
 
 def _prepare():
     enable_dpi_awareness()
@@ -30,12 +42,31 @@ def run_whimbox():
     from whimbox.agent import whimbox_agent
     from whimbox.rpc_server import start_rpc_server
 
-    logger.info("加载插件……")
-    init_plugins()
-    logger.info("启动agent……")
-    asyncio.run(whimbox_agent.start())
+    asyncio.run(_run_whimbox_services(init_plugins, whimbox_agent, start_rpc_server))
+
+
+async def _run_whimbox_services(init_plugins, whimbox_agent, start_rpc_server):
+    def _run_agent_bootstrap():
+        logger.info("加载插件……")
+        init_plugins()
+        asyncio.run(whimbox_agent.start())
+
+    async def _start_agent_background():
+        logger.info("启动agent……")
+        try:
+            await asyncio.to_thread(_run_agent_bootstrap)
+        except Exception as exc:
+            logger.error(f"agent后台初始化失败: {exc}")
+            raise
+
+    agent_task = asyncio.create_task(_start_agent_background())
     logger.info("启动rpc服务器……")
-    asyncio.run(start_rpc_server())
+    try:
+        await start_rpc_server()
+    finally:
+        if not agent_task.done():
+            agent_task.cancel()
+            await asyncio.gather(agent_task, return_exceptions=True)
 
 def run_one_dragon():
     _prepare()
