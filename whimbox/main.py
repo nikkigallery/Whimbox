@@ -46,15 +46,13 @@ def run_whimbox():
 
 
 async def _run_whimbox_services(init_plugins, whimbox_agent, start_rpc_server):
-    def _run_agent_bootstrap():
-        logger.info("加载插件……")
-        init_plugins()
-        asyncio.run(whimbox_agent.start())
+    logger.info("加载插件……")
+    init_plugins()
 
     async def _start_agent_background():
         logger.info("启动agent……")
         try:
-            await asyncio.to_thread(_run_agent_bootstrap)
+            await whimbox_agent.start()
         except Exception as exc:
             logger.error(f"agent后台初始化失败: {exc}")
             raise
