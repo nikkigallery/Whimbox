@@ -65,7 +65,7 @@ class StartGameTask(TaskTemplate):
         time.sleep(1) #稍等片刻，避免用户误操作
         launcher_handle.set_foreground()
         launcher_itt = InteractionBGD(launcher_handle)
-        retry_time = 10
+        retry_time = 30
         while not self.need_stop() and retry_time > 0:
             time.sleep(1)
             text = launcher_itt.ocr_single_line(AreaLaunchButton).lower()
