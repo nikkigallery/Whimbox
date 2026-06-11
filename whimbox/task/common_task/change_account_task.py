@@ -18,6 +18,9 @@ class ChangeAccountTask(TaskTemplate):
     def _iter_text_box_by_y(self, text_box_dict):
         return sorted(text_box_dict.items(), key=lambda item: item[1][1])
 
+    def _normalize_account_key(self, account):
+        return str(account).replace("*", "")
+
     def get_account_box_dict(self, cap=None, show_res=False, y_threshold=10):
         text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList, cap=cap, show_res=show_res)
         if not text_box_dict:
@@ -49,6 +52,7 @@ class ChangeAccountTask(TaskTemplate):
         for line in lines:
             items = sorted(line["items"], key=lambda item: item["x1"])
             account = "".join(item["text"] for item in items).strip()
+            account = self._normalize_account_key(account)
             if not account or not account.isascii():
                 continue
 
