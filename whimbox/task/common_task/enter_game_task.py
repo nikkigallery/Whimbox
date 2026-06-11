@@ -42,7 +42,7 @@ class EnterGameTask(TaskTemplate):
                     self.update_task_result(status=STATE_TYPE_SUCCESS, message="成功进入游戏")
                     break
             else:
-                itt.move_and_click((100, 100))
+                itt.move_and_click((1920/2, 900)) # 不能点击屏幕中央，点到中央的月卡图标会无法跳过。
     
     def handle_finally(self):
         pass
