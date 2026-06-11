@@ -42,12 +42,13 @@ class EnterGameTask(TaskTemplate):
                     self.update_task_result(status=STATE_TYPE_SUCCESS, message="成功进入游戏")
                     break
             else:
-                itt.key_press(keybind.KEYBIND_INTERACTION)
+                itt.move_and_click((100, 100))
     
     def handle_finally(self):
         pass
     
 if __name__ == "__main__":
     task = EnterGameTask(session_id="debug")
-    result = task.task_run()
-    print(result)
+    # result = task.task_run()
+    # print(result)
+    task.step_loading_game()
