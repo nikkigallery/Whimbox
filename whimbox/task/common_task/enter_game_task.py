@@ -42,7 +42,7 @@ class EnterGameTask(TaskTemplate):
                     self.update_task_result(status=STATE_TYPE_SUCCESS, message="成功进入游戏")
                     break
             else:
-                itt.move_and_click((1920/2, 600)) # 如果开了周卡，1920/2, 1080/2的屏幕中心位置刚好在钻石图标上，点击无法跳过月卡界面
+                itt.key_press(keybind.KEYBIND_INTERACTION)
     
     def handle_finally(self):
         pass
