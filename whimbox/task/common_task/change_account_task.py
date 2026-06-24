@@ -19,9 +19,12 @@ class ChangeAccountTask(TaskTemplate):
         return sorted(text_box_dict.items(), key=lambda item: item[1][1])
 
     def _normalize_account_key(self, account):
+        account = str(account)
+        if not account.isascii():
+            return ""
         allowed_chars = "abcdefghijklmnopqrstuvwxyz0123456789@."
         return "".join(
-            char for char in str(account).lower()
+            char for char in account.lower()
             if char in allowed_chars
         )
 
@@ -72,6 +75,9 @@ class ChangeAccountTask(TaskTemplate):
     @register_step("退出登录")
     def step_logout(self):
         itt.delay(3, comment="等待进入登录界面")
+        # 如果当前已经是退出登录状态，直接去下一步
+        if itt.get_img_existence(ButtonLogin):
+            return
         if wait_until_appear_then_click(ButtonExitLogout, retry_time=20):
             while not self.need_stop():
                 itt.delay(1)

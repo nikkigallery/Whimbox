@@ -38,7 +38,7 @@ STEP_RESULT_SKIPPED = "skipped"
 class AllInOneTask(TaskTemplate):
     def __init__(self, session_id):
         super().__init__(session_id=session_id, name="all_in_one_task")
-        self.game_already_started = False
+        self.is_already_in_game = False
         self.default_step_states = {
             key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
         }
@@ -295,14 +295,14 @@ class AllInOneTask(TaskTemplate):
                 msg = f"❗当前游戏分辨率：{width}x{height}。推荐使用1920x1080或1920x1200或2560x1440或2560x1600分辨率，窗口模式。如遇到bug，请修改游戏分辨率和显示模式后重试"
                 self.log_to_gui(msg)
             if task_result.message == "已成功进入游戏":
-                self.game_already_started = True
+                self.is_already_in_game = True
         else:
             self.update_task_result(STATE_TYPE_FAILED, task_result.message)
             return STEP_NAME_FINISH
 
     @ register_step("")
     def step_enter_game(self):
-        if self.game_already_started:
+        if self.is_already_in_game:
             return
         enter_game_task = EnterGameTask(session_id=self.session_id)
         task_result = enter_game_task.task_run()
@@ -398,7 +398,7 @@ class AllInOneTask(TaskTemplate):
 
     @register_step("切换账号")
     def step_change_account(self):
-        if self.game_already_started and len(self.account_list) == 0:
+        if self.is_already_in_game and len(self.account_list) == 0:
             if not self._quit_to_login():
                 self.log_to_gui("返回登录界面失败，只完成当前账号一条龙", is_error=True)
                 return
