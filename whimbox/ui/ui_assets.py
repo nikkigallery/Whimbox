@@ -57,7 +57,7 @@ AreaBigMapMaterialSelect = Area(anchor=ANCHOR_CENTER)
 AreaBigMapMaterialTrackConfirm = Area(anchor=ANCHOR_CENTER)
 
 # 大世界采集、跳跃、移动、跳过等相关的UI
-AreaDialog = Area(anchor=ANCHOR_CENTER, expand=True)
+AreaDialog = Area(anchor=ANCHOR_CENTER)
 AreaPickup = Area(anchor=ANCHOR_CENTER, expand=True)
 TextPickUp = Text("拾取", cap_area = AreaPickup)
 IconPickupFeature = ImgIcon(print_log=LOG_NONE, threshold=0.75, gray_limit=(210, 255))
