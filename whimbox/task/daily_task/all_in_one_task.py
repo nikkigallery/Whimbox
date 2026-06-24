@@ -118,7 +118,7 @@ class AllInOneTask(TaskTemplate):
             if self.default_step_enabled.get(key, True)
         ]
         if later_enabled_keys:
-            step_order.append("step_check_in_home")
+            # step_order.append("step_check_in_home")
             for key in later_enabled_keys:
                 step_order.append(next(step_name for config_key, step_name, _ in DEFAULT_STEP_CONFIG if config_key == key))
 
@@ -331,15 +331,15 @@ class AllInOneTask(TaskTemplate):
             self.log_to_gui("今日有巨陨星❗")
             self.has_meteor_today = True
 
-    @register_step("检查是否在家园")
-    def step_check_in_home(self):
-        from whimbox.map.map import nikki_map
-        if not nikki_map.small_map_init_flag:
-            nikki_map.reinit_smallmap()
-        if nikki_map.map_name == MAP_NAME_HOME:
-            self.log_to_gui("传送到大世界")
-            loc = convert_GameLoc_to_PngMapPx([-13172.34765625, -54273.6171875], MAP_NAME_MIRALAND)
-            nikki_map.bigmap_tp(loc, MAP_NAME_MIRALAND)
+    # @register_step("检查是否在家园")
+    # def step_check_in_home(self):
+    #     from whimbox.map.map import nikki_map
+    #     if not nikki_map.small_map_init_flag:
+    #         nikki_map.reinit_smallmap()
+    #     if nikki_map.map_name == MAP_NAME_HOME:
+    #         self.log_to_gui("传送到大世界")
+    #         loc = convert_GameLoc_to_PngMapPx([-13172.34765625, -54273.6171875], MAP_NAME_MIRALAND)
+    #         nikki_map.bigmap_tp(loc, MAP_NAME_MIRALAND)
 
     @register_step("检查周本进度")
     def step2(self):
@@ -486,7 +486,7 @@ class AllInOneTask(TaskTemplate):
 
 if __name__ == "__main__":
     task = AllInOneTask(session_id="debug")
-    # result = task.task_run()
+    result = task.task_run()
     # print(result.to_dict())
     # task.step_check_in_home()
-    task.step_home_task()
+    # task.step_home_task()
