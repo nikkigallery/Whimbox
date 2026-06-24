@@ -5,6 +5,8 @@ import contextvars
 from whimbox.common.path_lib import IS_DEV_MODE
 from whimbox.config.config import global_config
 
+PAPER_LAUNCHER_NAME = "xstarter.exe"
+
 DEBUG_MODE = global_config.get_bool('General', 'debug') and IS_DEV_MODE
 CV_DEBUG_MODE = global_config.get_bool('General', 'cv_debug') and IS_DEV_MODE
 

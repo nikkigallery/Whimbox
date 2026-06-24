@@ -24,7 +24,7 @@ class StartGameTask(TaskTemplate):
             return
         
         # 判断启动器是否已经在运行
-        launcher_handle = ProcessHandler(process_name="xstarter.exe")
+        launcher_handle = ProcessHandler(process_name=PAPER_LAUNCHER_NAME)
         if not launcher_handle.get_handle():
             launcher_path = global_config.get("Whimbox", "launcher_path")
             if launcher_path == "":
