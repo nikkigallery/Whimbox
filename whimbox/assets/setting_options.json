@@ -53,6 +53,14 @@
         "奇格格达",
         "卷卷"
     ],
+    "mira_crown_award_target": [
+        "启示水晶",
+        "共鸣水晶",
+        "纯真丝线",
+        "闪亮泡泡",
+        "闪光粒子",
+        "噗灵x20000"
+    ],
     "model_provider": [
         "openai",
         "anthropic",

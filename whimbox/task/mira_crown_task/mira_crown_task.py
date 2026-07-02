@@ -45,10 +45,7 @@ class MiraCrownTask(TaskTemplate):
             self.is_quick_reward = True
     
     @register_step("进入挑战")
-    def step3(self):
-        # itt.wait_until_stable(0.95)
-        # if wait_until_appear_then_click(ButtonMiraCrownRank, retry_time=1):
-        #     itt.wait_until_stable(0.95)
+    def step3(self):            
         # 如果是快速奖励进来的，要从第二个门进去（第三个门是锁住的），不然从第三个门进去
         if not self.is_quick_reward:
             AreaMiraCrownThirdDoor.click()
@@ -119,13 +116,61 @@ class MiraCrownTask(TaskTemplate):
         else:
             return "step4"
     
-    @register_step("挑战结束")
+    @register_step("领取奖励")
     def step6(self):
+        if not global_config.get_bool("OneDragon", "get_mira_crown_award", False):
+            self.log_to_gui("未设置自动领取巅峰赛奖励，跳过")
+            return STEP_NAME_FINISH
+        
+        ui_control.goto_page(page_esc)
+        if not scroll_find_click(AreaEscEntrances, "奇迹之冠"):
+            raise Exception("奇迹之冠入口未找到")
+        itt.wait_until_stable(0.95)
+        AreaMiraCrownEntrance.click()
+        itt.wait_until_stable(0.95)
+        wait_until_appear_then_click(ButtonMiraCrownRank, retry_time=1)
+        
+        # 领取奖励
+        if not wait_until_appear_then_click(ButtonMiraCrownAward):
+            raise Exception("未找到奇迹之冠“赛事嘉奖”按钮")
+        itt.delay(1, comment="等待奖励界面弹出")
+        if not wait_until_appear_then_click(ButtonMiraCrownRewardGet):
+            self.log_to_gui("当前暂无奖励可领取", is_error=True)
+        else:
+            skip_get_award()
+        itt.key_press("esc")
+        
+        # 兑换
+        if not wait_until_appear_then_click(ButtonMiraCrownShop):
+            raise Exception("未找到奇迹之冠“晶石兑换”按钮")
+        itt.delay(1, comment="等待兑换界面弹出")
+        targets = global_config.get("OneDragon", "mira_crown_award_target")
+        for target in targets:
+            if not scroll_find_click(AreaMiraCrownShopItemList, target, str_match_mode=1, need_scroll=False):
+                raise Exception("未找到“" + target + "”的兑换按钮")
+            else:
+                if not wait_until_appear(ButtonMiraCrownShopMax):
+                    self.log_to_gui(f"“{target}”已被兑换完，无需再次兑换")
+                    continue
+                if DEBUG_MODE:
+                    self.log_to_gui("debug下，不点max按钮，为了能多测几次")
+                else:
+                    if not wait_until_appear_then_click(ButtonMiraCrownShopMax):
+                        raise Exception("未找到最大化按钮")
+                if not wait_until_appear_then_click(ButtonMiraCrownShopConfirm):
+                    raise Exception("未找到确认按钮")
+                skip_get_award()
+                self.log_to_gui(f"成功兑换“{target}”")
+                itt.delay(0.5, comment="等待兑换完成")
+    
+    @register_step("挑战结束")
+    def step7(self):
         back_to_page_main()
-
+                
 
 if __name__ == "__main__":
     task = MiraCrownTask(session_id="debug", force_start=True)
     result = task.task_run()
     print(result.to_dict())
+    # task.step6()
 

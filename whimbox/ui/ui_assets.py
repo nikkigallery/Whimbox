@@ -227,6 +227,15 @@ ButtonMiraCrownNextStep = Button(anchor=ANCHOR_BOTTOM_LEFT, print_log=LOG_ALL)
 ButtonMiraCrownConfirmMatch = Button(anchor=ANCHOR_BOTTOM_LEFT, print_log=LOG_ALL)
 ButtonMiraCrownSkipAll = Button(anchor=ANCHOR_TOP_RIGHT, print_log=LOG_ALL, threshold=0.80, hsv_limit=([20,20,180], [30,100,255]))
 
+# 奇迹之冠奖励
+ButtonMiraCrownShop = Button(anchor=ANCHOR_BOTTOM_LEFT, print_log=LOG_ALL, threshold=0.90, hsv_limit=([0,0,190], [40,40,255]))
+ButtonMiraCrownAward = Button(anchor=ANCHOR_BOTTOM_LEFT, print_log=LOG_ALL, threshold=0.90, hsv_limit=([0,0,190], [40,40,255]))
+AreaMiraCrownShopItemList = Area(anchor=ANCHOR_TOP_CENTER)
+ButtonMiraCrownShopMax = Button(anchor=ANCHOR_CENTER, print_log=LOG_ALL)
+ButtonMiraCrownShopConfirm = Button(anchor=ANCHOR_CENTER, print_log=LOG_ALL)
+ButtonMiraCrownRewardGet = Button(anchor=ANCHOR_CENTER, print_log=LOG_ALL)
+
+
 # 活动相关
 # 1.11大富翁活动
 ButtonMonopolyEntrance = Button(print_log=LOG_WHEN_TRUE)

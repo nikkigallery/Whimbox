@@ -138,6 +138,17 @@
         "ability_plan": {
             "value": 3,
             "description": "允许奇想盒使用几号能力配置方案"
+        },
+        "get_mira_crown_award": {
+            "value": "false",
+            "description": "自动领取奇迹之冠巅峰赛奖励并兑换"
+        },
+        "mira_crown_award_target": {
+            "value": [
+                "启示水晶",
+                "共鸣水晶"
+            ],
+            "description": "奇迹之冠巅峰赛兑换目标"
         }
     },
     "OneDragonDefaultSteps": {
