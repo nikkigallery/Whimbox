@@ -19,7 +19,7 @@ class EnterGameTask(TaskTemplate):
          # 不停点击，直到进入loading界面
         while not self.need_stop():
             time.sleep(1)
-            itt.move_and_click((100, 100))
+            itt.move_and_click((1920/2, 100)) # 点击屏幕中央上方区域，这块不怎么有UI，可以避免误点
             if itt.get_img_existence(IconUILoading):
                 break
         
