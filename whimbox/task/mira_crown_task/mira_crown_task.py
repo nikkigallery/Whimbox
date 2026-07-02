@@ -91,7 +91,7 @@ class MiraCrownTask(TaskTemplate):
         itt.delay(1, "等待界面加载完全")
         if not scroll_find_click(AreaMiraCrownAutoMatchButton, "推荐搭配", need_scroll=False):
             raise Exception("未找到推荐搭配按钮")
-        itt.delay(2, comment="搭配完会卡一下")
+        itt.delay(5, comment="搭配完会卡一下")
         if not wait_until_appear_then_click(ButtonMiraCrownNextStep):
             raise Exception("未找到下一步按钮")
         if not wait_until_appear_then_click(ButtonMiraCrownConfirmMatch):
