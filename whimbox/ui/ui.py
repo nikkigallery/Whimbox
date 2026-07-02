@@ -151,7 +151,7 @@ class UI():
                         success = False
                         break
 
-                itt.wait_until_stable(threshold=0.95)
+                itt.wait_until_stable(threshold=0.98)
                 # Handle loading screen
                 self.ui_additional()
                 logger.info("page transition completed")
@@ -199,5 +199,5 @@ ui_control = UI()
 
 if __name__ == '__main__':
     # ui_control.goto_page(page_esc)
-    ui_control.goto_page(page_huanjing_jihua)
-    # ui_control.goto_page(page_ability)
+    # ui_control.goto_page(page_huanjing_jihua)
+    ui_control.goto_page(page_ability)
