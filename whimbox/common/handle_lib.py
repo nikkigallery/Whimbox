@@ -39,10 +39,20 @@ class ProcessHandler:
 
     def refresh_handle(self) -> None:
         """Re-locate the process and update the native handle and PID."""
-        self._native_handle = self._mgr.find_process(self.process_name, self.pid)
-        new_pid = self._mgr.get_pid(self._native_handle, self.process_name)
+        native_handle = self._mgr.find_process(self.process_name, self.pid)
+
+        if not self._mgr.is_alive(native_handle) and self.process_name is not None and self.pid is not None:
+            native_handle = self._mgr.find_process(self.process_name, None)
+
+        new_pid = self._mgr.get_pid(native_handle, self.process_name)
         if new_pid:
             self.pid = new_pid
+            if not self._mgr.is_alive(native_handle):
+                native_handle = self._mgr.find_process(self.process_name, new_pid)
+        elif self.process_name is not None and not self._mgr.is_alive(native_handle):
+            self.pid = None
+
+        self._native_handle = native_handle
 
     # ------------------------------------------------------------------
     # Window state queries

@@ -36,7 +36,9 @@ def _error(message: str) -> Dict[str, Any]:
 
 def _check_game_ok(session_id: str = "default") -> Dict[str, Any]:
     if not HANDLE_OBJ.is_alive():
-        return _error("游戏未启动，请先启动游戏")
+        HANDLE_OBJ.refresh_handle()
+        if not HANDLE_OBJ.is_alive():
+            return _error("游戏未启动，请先启动游戏")
     # 将游戏窗口前置
     time.sleep(1) # 由于奇想盒前端会在任务开始时将自己最小化，而这里同时将游戏窗口前置，会导致windows窗口抢占，前置失败报错，所以加点延时
     HANDLE_OBJ.set_foreground()
