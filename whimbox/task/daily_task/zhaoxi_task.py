@@ -53,6 +53,12 @@ zxxy_task_info_list = [
         "task_name": DAILY_TASK_CATCH_INSECT
     },
     {
+        "key_words": ["魔气怪"],
+        "score": 200,
+        "priority": 2,
+        "task_name": DAILY_TASK_FIGHT
+    },
+    {
         "key_words": ["小游戏"],
         "score": 200,
         "priority": 0,
@@ -75,12 +81,6 @@ zxxy_task_info_list = [
         "score": 100,
         "priority": 0,
         "task_name": DAILY_TASK_UPGRADE_BLESSED
-    },
-    {
-        "key_words": ["魔气怪"],
-        "score": 100,
-        "priority": 0,
-        "task_name": DAILY_TASK_FIGHT
     },
     {
         "key_words": ["制作"],
@@ -180,6 +180,10 @@ class ZhaoxiTask(TaskTemplate):
                 session_id=self.session_id,
                 path_name="朝夕心愿_捕虫",
                 excepted_num=3,
+            ),
+            DAILY_TASK_FIGHT: AutoPathTask(
+                session_id=self.session_id,
+                path_name="朝夕心愿_战斗",
             ),
             # DAILY_TASK_MINIGAME: AutoPathTask(path_name="朝夕心愿_小游戏"),
             DAILY_TASK_GET_BLESS: daily_task.BlessTask(session_id=self.session_id),
