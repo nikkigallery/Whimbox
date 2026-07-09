@@ -1,0 +1,15 @@
+[
+  {
+    "map_name": "miraland",
+    "image_left": 1000.0,
+    "image_top": 6500.0,
+    "image_width": 1920.0,
+    "image_height": 1080.0,
+    "screen_left": 0,
+    "screen_top": 0,
+    "screen_width": 1920,
+    "screen_height": 1080,
+    "scale": 1.0,
+    "rotation": 0.0
+  }
+]

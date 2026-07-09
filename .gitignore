@@ -139,3 +139,24 @@ whimbox/assets/imgs/Maps/w14000000_v2.png
 whimbox/assets/imgs/Maps/w8000001_v1.png
 whimbox/assets/imgs/Maps/w4020034.png
 workspace/*
+
+# Map Mask runtime/debug artifacts
+debug_bigmap_match/
+map-mask-auto-viewport-artifacts/
+pearpal-candidates.json
+pearpal-pillars.json
+pearpal_checkpoint_matches.json
+pearpal_landmarks.json
+pearpal_to_*_transform.json
+center_observations.json
+center_correction.json
+viewport_calibration.candidate.json
+*.heatmap.png
+*match-debug*.png
+*capture*.png
+
+# User-owned Map Mask data; commit only *.example.json files
+assets/map_mask/labels.local.json
+assets/map_mask/points.local.json
+assets/map_mask/points.*.local.json
+assets/map_mask/viewport_calibration.json

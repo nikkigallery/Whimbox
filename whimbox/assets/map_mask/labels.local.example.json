@@ -1,0 +1,18 @@
+[
+  {
+    "id": "local_marker",
+    "name": "Local marker",
+    "parent_id": null,
+    "icon": "marker.svg",
+    "provider": "local",
+    "default_enabled": true
+  },
+  {
+    "id": "pearpal_10",
+    "name": "Warp Spire",
+    "parent_id": null,
+    "icon": "marker.svg",
+    "provider": "pearpal-debug",
+    "default_enabled": true
+  }
+]

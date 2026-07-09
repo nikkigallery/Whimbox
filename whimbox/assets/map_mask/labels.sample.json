@@ -1,0 +1,18 @@
+[
+  {
+    "id": "teleport",
+    "name": "Teleport",
+    "parent_id": null,
+    "icon": "teleport.svg",
+    "provider": "local",
+    "default_enabled": true
+  },
+  {
+    "id": "material",
+    "name": "Material",
+    "parent_id": null,
+    "icon": "material.svg",
+    "provider": "local",
+    "default_enabled": true
+  }
+]

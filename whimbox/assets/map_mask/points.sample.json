@@ -1,0 +1,30 @@
+[
+  {
+    "id": "sample_material",
+    "label_id": "material",
+    "name": "Sample material",
+    "map_name": "miraland",
+    "image_x": 1234.5,
+    "image_y": 6789.0,
+    "icon": "material.svg",
+    "provider": "local",
+    "detail": {
+      "description": "Map Mask sample point.",
+      "images": []
+    }
+  },
+  {
+    "id": "sample_teleport",
+    "label_id": "teleport",
+    "name": "Sample teleport",
+    "map_name": "miraland",
+    "image_x": 1500.0,
+    "image_y": 7000.0,
+    "icon": "teleport.svg",
+    "provider": "local",
+    "detail": {
+      "description": "Map Mask sample teleport.",
+      "images": []
+    }
+  }
+]

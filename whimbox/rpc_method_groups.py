@@ -167,6 +167,55 @@ def handle_background_method(method: str, params: Dict[str, Any]) -> Any:
     return UNHANDLED
 
 
+def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
+    if not method.startswith("map_mask."):
+        return UNHANDLED
+
+    from whimbox.map.mask.service import map_mask_service
+
+    if method == "map_mask.get_state":
+        return map_mask_service.get_state(
+            viewport=_parse_map_mask_viewport(params.get("viewport")),
+            map_name=_parse_optional_string(params.get("map_name")),
+        )
+
+    if method == "map_mask.get_labels":
+        return {
+            "labels": map_mask_service.get_labels(),
+            "selected_label_ids": map_mask_service.get_selected_label_ids(),
+        }
+
+    if method == "map_mask.set_selected_labels":
+        label_ids = params.get("selected_label_ids", params.get("label_ids", []))
+        if not isinstance(label_ids, list):
+            raise ValueError("selected_label_ids must be a list")
+        return map_mask_service.set_selected_label_ids([str(item) for item in label_ids])
+
+    if method == "map_mask.get_visible_points":
+        return map_mask_service.get_visible_points(
+            viewport=_parse_map_mask_viewport(params.get("viewport")),
+            map_name=_parse_optional_string(params.get("map_name")),
+            label_ids=_parse_optional_string_list(params.get("label_ids")),
+        )
+
+    if method == "map_mask.get_point_detail":
+        point_id = _parse_optional_string(params.get("point_id"))
+        if not point_id:
+            raise ValueError("point_id is required")
+        return map_mask_service.get_point_detail(point_id)
+
+    if method == "map_mask.set_enabled":
+        return map_mask_service.set_enabled(_coerce_bool(params.get("enabled", True)))
+
+    if method == "map_mask.set_bigmap_detection_mode":
+        mode = _parse_optional_string(params.get("mode"))
+        if not mode:
+            raise ValueError("mode is required")
+        return map_mask_service.set_bigmap_detection_mode(mode)
+
+    return UNHANDLED
+
+
 async def handle_weixin_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "weixin.login.start":
         return await weixin_service.start_login()
@@ -187,6 +236,31 @@ async def handle_weixin_method(method: str, params: Dict[str, Any]) -> Any:
         return await weixin_service.disconnect()
 
     return UNHANDLED
+
+
+def _parse_map_mask_viewport(value: Any):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("viewport must be an object")
+    from whimbox.map.mask.models import MapMaskViewport
+
+    return MapMaskViewport.from_dict(value)
+
+
+def _parse_optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_optional_string_list(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("label_ids must be a list")
+    return [str(item) for item in value]
 
 
 def _load_setting_options() -> Dict[str, Any]:

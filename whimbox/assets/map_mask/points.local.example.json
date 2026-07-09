@@ -1,0 +1,16 @@
+[
+  {
+    "id": "local_example_1",
+    "label_id": "local_marker",
+    "name": "Local example point",
+    "map_name": "miraland",
+    "image_x": 16497.5,
+    "image_y": 14517.4,
+    "icon": "marker.svg",
+    "provider": "local",
+    "detail": {
+      "description": "",
+      "images": []
+    }
+  }
+]
