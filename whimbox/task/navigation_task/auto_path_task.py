@@ -12,6 +12,7 @@ from whimbox.action.pickup import PickupTask
 from whimbox.action.catch_insect import CatchInsectTask
 from whimbox.action.floral_insect import FloralInsectTask
 from whimbox.action.clean_animal import CleanAnimalTask
+from whimbox.action.fairy_animal import FairyAnimalTask
 from whimbox.action.fishing import FishingTask, FISHING_TYPE_MIRALAND, FISHING_TYPE_HOME
 from whimbox.common.base_threading import BaseThreading
 from whimbox.common.keybind import keybind
@@ -340,7 +341,7 @@ class AutoPathTask(TaskTemplate):
                         floral_insect_task = FloralInsectTask(self.session_id)
                         task_result = floral_insect_task.task_run()
                     else:
-                        self.log_to_gui("测试跑图路线中，不进行芳间巡游")
+                        self.log_to_gui("测试跑图路线中，不进行捕虫")
                         time.sleep(2)
                 elif self.target_point.action == ACTION_CLEAN_ANIMAL:
                     if not self.path_info.test_mode:
@@ -351,6 +352,13 @@ class AutoPathTask(TaskTemplate):
                             expected_count=excepted_count)
                         task_result = clean_animal_task.task_run()
                         self.merge_material_count_dict(task_result.data)
+                    else:
+                        self.log_to_gui("测试跑图路线中，不进行清洁")
+                        time.sleep(2)
+                elif self.target_point.action == ACTION_FAIRY_ANIMAL:
+                    if not self.path_info.test_mode:
+                        fairy_animal_task = FairyAnimalTask(self.session_id)
+                        task_result = fairy_animal_task.task_run()
                     else:
                         self.log_to_gui("测试跑图路线中，不进行清洁")
                         time.sleep(2)
