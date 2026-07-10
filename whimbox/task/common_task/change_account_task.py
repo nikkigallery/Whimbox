@@ -112,7 +112,7 @@ class ChangeAccountTask(TaskTemplate):
                         self.account_list.append(key)
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
                 itt.move_to(scroll_posi, anchor=AreaLoginAccountList.position.anchor)
-                itt.middle_scroll(-15)
+                itt.middle_scroll(-10)
                 time.sleep(0.2)
                 # 如果画面不再变化，说明滚到底了
                 new_cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
@@ -133,6 +133,8 @@ class ChangeAccountTask(TaskTemplate):
             while not self.need_stop():
                 account_box_dict = self.get_account_box_dict()
                 for key, box in account_box_dict.items():
+                    if key not in self.account_list:
+                        self.account_list.append(key)
                     if key not in self.finished_account_list:
                         AreaLoginAccountList.click(target_box=box)
                         time.sleep(0.5)
@@ -143,7 +145,7 @@ class ChangeAccountTask(TaskTemplate):
                     break
                 scroll_posi = (AreaLoginAccountList.position.x2, AreaLoginAccountList.position.y2)
                 itt.move_to(scroll_posi, anchor=AreaLoginAccountList.position.anchor)
-                itt.middle_scroll(-15)
+                itt.middle_scroll(-10)
                 time.sleep(0.2)
                 # 如果画面不再变化，说明滚到底了
                 new_cap = itt.capture(anchor_posi = AreaLoginAccountList.position)
