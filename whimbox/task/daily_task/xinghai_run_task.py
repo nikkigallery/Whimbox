@@ -13,6 +13,7 @@ class XinghaiRunTask(TaskTemplate):
     def __init__(self, session_id):
         super().__init__(session_id=session_id, name="xinghai_run_task")
         self.target_loc = None
+        self.not_find_crystal_times = 0
 
     @register_step("传送到星海无界枢纽")
     def step0(self):
@@ -22,7 +23,7 @@ class XinghaiRunTask(TaskTemplate):
     @register_step("摇铃")
     def step1(self):
         itt.key_down(keybind.KEYBIND_BELL)
-        time.sleep(3)
+        time.sleep(4)
         itt.key_up(keybind.KEYBIND_BELL)
         wait_until_appear(IconPageMainFeature, retry_time=10)
 
@@ -99,8 +100,14 @@ class XinghaiRunTask(TaskTemplate):
                     break
             else:
                 if first_try_find:
-                    self.update_task_result(status=STATE_TYPE_FAILED, message="地图上未找到星光结晶")
-                    return "step_finish"
+                    self.not_find_crystal_times += 1
+                    if self.not_find_crystal_times > 1:
+                        self.update_task_result(status=STATE_TYPE_FAILED, message="地图上未找到星光结晶")
+                        return "step_finish"
+                    else:
+                        self.log_to_gui("未找到星光结晶，重试一遍")
+                        back_to_page_main()
+                        return "step1"
                 else:
                     break
             first_try_find = False
