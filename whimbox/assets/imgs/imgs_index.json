@@ -143,6 +143,9 @@
   "AreaMiraCrownSecondDoor": {
     "rel_path": "imgs\\Windows\\UI\\mira_crown\\AreaMiraCrownSecondDoor.jpg"
   },
+  "AreaMiraCrownShopItemList": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\AreaMiraCrownShopItemList.png"
+  },
   "AreaMiraCrownThirdDoor": {
     "rel_path": "imgs\\Windows\\UI\\mira_crown\\AreaMiraCrownThirdDoor.jpg"
   },
@@ -187,6 +190,9 @@
   },
   "AreaUITime": {
     "rel_path": "imgs\\Windows\\UI\\AreaUITime.png"
+  },
+  "AreaUnexceptedPopupConfirm": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaUnexceptedPopupConfirm.png"
   },
   "AreaWardrobeAbilityBattleText": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaWardrobeAbilityBattleText.png"
@@ -335,6 +341,9 @@
   "ButtonMinigameRetryOk": {
     "rel_path": "imgs\\Windows\\UI\\minigame\\ButtonMinigameRetryOk.png"
   },
+  "ButtonMiraCrownAward": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownAward.png"
+  },
   "ButtonMiraCrownConfirmMatch": {
     "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownConfirmMatch.png"
   },
@@ -346,6 +355,18 @@
   },
   "ButtonMiraCrownRank": {
     "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownRank.png"
+  },
+  "ButtonMiraCrownRewardGet": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownRewardGet.png"
+  },
+  "ButtonMiraCrownShop": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownShop.png"
+  },
+  "ButtonMiraCrownShopConfirm": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownShopConfirm.png"
+  },
+  "ButtonMiraCrownShopMax": {
+    "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownShopMax.png"
   },
   "ButtonMiraCrownSkipAll": {
     "rel_path": "imgs\\Windows\\UI\\mira_crown\\ButtonMiraCrownSkipAll.png"

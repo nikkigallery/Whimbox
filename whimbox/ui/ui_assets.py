@@ -30,6 +30,8 @@ TextExitBackLoginButton = Text("返回登录", cap_area = AreaExitBackLoginButto
 ButtonExitLogout = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,200], [179,80,255]), anchor=ANCHOR_TOP_RIGHT)
 ButtonLogin = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,180], [30,255,255]), anchor=ANCHOR_BOTTOM_CENTER)
 AreaLoginAccountList = Area(anchor=ANCHOR_CENTER)
+AreaUnexceptedPopupConfirm = Area(anchor=ANCHOR_CENTER)
+TextUnexceptedPopupConfirm = Text("确认", cap_area = AreaUnexceptedPopupConfirm)
 # 聊天框特征
 IconPageChatFeature = ImgIcon(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 ButtonPageChatClose = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_TOP_LEFT)

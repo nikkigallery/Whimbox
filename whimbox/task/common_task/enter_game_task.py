@@ -4,6 +4,7 @@ from whimbox.ui.page_assets import *
 from whimbox.ui.ui_assets import *
 from whimbox.interaction.interaction_core import itt
 from whimbox.common.logger import logger
+from whimbox.common.utils.ui_utils import *
 
 class EnterGameTask(TaskTemplate):
     def __init__(self, session_id):
@@ -30,6 +31,15 @@ class EnterGameTask(TaskTemplate):
             if not itt.get_img_existence(IconUILoading):
                 self.log_to_gui("游戏加载完成")
                 break
+        
+        # 先检查有没有跳出各种各样的确认弹窗，比如：道具过期、网络波动等等
+        self.log_to_gui("检查是否出现异常弹窗")
+        if wait_until_appear_then_click(TextUnexceptedPopupConfirm):
+            self.log_to_gui("出现异常弹窗，自动点击“确认”")
+            if wait_until_appear(ButtonExitLogout):
+                self.log_to_gui("异常退出到登录界面，重新进入游戏", is_error=True)
+                return "step_enter_game"
+        
         # 不停点击，尝试点掉月卡界面，直到出现主界面
         self.log_to_gui("检测是否需要领取小月卡")
         times = 0
@@ -49,6 +59,6 @@ class EnterGameTask(TaskTemplate):
     
 if __name__ == "__main__":
     task = EnterGameTask(session_id="debug")
-    # result = task.task_run()
-    # print(result)
-    task.step_loading_game()
+    result = task.task_run()
+    print(result)
+    # task.step_loading_game()
