@@ -32,6 +32,7 @@ ButtonLogin = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,18
 AreaLoginAccountList = Area(anchor=ANCHOR_CENTER)
 AreaUnexceptedPopupConfirm = Area(anchor=ANCHOR_CENTER)
 TextUnexceptedPopupConfirm = Text("确认", cap_area = AreaUnexceptedPopupConfirm)
+ButtonItemExpiredConfirm = Button(print_log=LOG_ALL, anchor=ANCHOR_CENTER)
 # 聊天框特征
 IconPageChatFeature = ImgIcon(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 ButtonPageChatClose = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_TOP_LEFT)

@@ -302,6 +302,9 @@
   "ButtonHuanjingGo": {
     "rel_path": "imgs\\Windows\\UI\\ButtonHuanjingGo.png"
   },
+  "ButtonItemExpiredConfirm": {
+    "rel_path": "imgs\\Windows\\UI\\login\\ButtonItemExpiredConfirm.png"
+  },
   "ButtonItemFinishSetting": {
     "rel_path": "imgs\\Windows\\UI\\item\\ButtonItemFinishSetting.png"
   },
