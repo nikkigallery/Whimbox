@@ -644,6 +644,12 @@
   "T_Icon_INT_Nature_Flower_05": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Nature_Flower_05.png"
   },
+  "T_Icon_INT_Nature_Shrub_102": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Nature_Shrub_102.png"
+  },
+  "T_Icon_INT_Nature_Tree_12": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Nature_Tree_12.png"
+  },
   "T_Icon_INT_Prop_Gameplay_326": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_INT_Prop_Gameplay_326.png"
   },
@@ -770,6 +776,9 @@
   "T_Icon_item_AN0099": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0099.png"
   },
+  "T_Icon_item_AN0099R2": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0099R2.png"
+  },
   "T_Icon_item_AN0100": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0100.png"
   },
@@ -893,6 +902,24 @@
   "T_Icon_item_AN0192": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0192.png"
   },
+  "T_Icon_item_AN0193": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0193.png"
+  },
+  "T_Icon_item_AN0194": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0194.png"
+  },
+  "T_Icon_item_AN0195": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0195.png"
+  },
+  "T_Icon_item_AN0196": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0196.png"
+  },
+  "T_Icon_item_AN0197": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0197.png"
+  },
+  "T_Icon_item_AN0198": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0198.png"
+  },
   "T_Icon_item_AN0208": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0208.png"
   },
@@ -934,6 +961,12 @@
   },
   "T_Icon_item_AN0276": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0276.png"
+  },
+  "T_Icon_item_AN0285": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0285.png"
+  },
+  "T_Icon_item_AN0286": {
+    "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_AN0286.png"
   },
   "T_Icon_item_ANQ0018": {
     "rel_path": "imgs\\Game\\MaterialIcon\\T_Icon_item_ANQ0018.png"
@@ -1133,17 +1166,17 @@
   "imgs_index": {
     "rel_path": "imgs\\imgs_index.json"
   },
-  "w01_v11": {
-    "rel_path": "imgs\\Maps\\w01_v11.png"
+  "w01_v12": {
+    "rel_path": "imgs\\Maps\\w01_v12.png"
   },
-  "w01_v11_luma_0125x": {
-    "rel_path": "imgs\\Maps\\w01_v11_luma_0125x.png"
+  "w01_v12_luma_0125x": {
+    "rel_path": "imgs\\Maps\\w01_v12_luma_0125x.png"
   },
-  "w01_v11_luma_05x": {
-    "rel_path": "imgs\\Maps\\w01_v11_luma_05x.png"
+  "w01_v12_luma_05x": {
+    "rel_path": "imgs\\Maps\\w01_v12_luma_05x.png"
   },
-  "w01_v11_mask_0125x": {
-    "rel_path": "imgs\\Maps\\w01_v11_mask_0125x.png"
+  "w01_v12_mask_0125x": {
+    "rel_path": "imgs\\Maps\\w01_v12_mask_0125x.png"
   },
   "w14000000_v2": {
     "rel_path": "imgs\\Maps\\w14000000_v2.png"

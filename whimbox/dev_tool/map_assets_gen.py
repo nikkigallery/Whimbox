@@ -79,7 +79,7 @@ def gen_ArrowRotateMapAll(arrow: MapAsset, arrows_map):
 
 if __name__ == '__main__':
     Image.MAX_IMAGE_PIXELS = None
-    mapOrg = MapAsset('w01_v11')
+    mapOrg = MapAsset('w01_v12')
     gen_luma_05x_0125x_map(mapOrg)
 
     # ARROW = MapAsset('ARROW')
