@@ -18,7 +18,7 @@ class FlourishTask(TaskTemplate):
         itt.key_press(keybind.KEYBIND_ABILITY_DERIVATION_WORLD_1)
         time.sleep(5)
         itt.right_click()
-        time.sleep(2)
+        time.sleep(4)
 
     def handle_finally(self):
         pass
