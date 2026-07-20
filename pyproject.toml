@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whimbox"
-version = "2.5.4"
+version = "2.5.5"
 description = "奇想盒-AI游戏助手"
 readme = "README.md"
 requires-python = "==3.12.8"
@@ -63,6 +63,6 @@ include = ["whimbox*"]
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__", "*.log"]
 # 排除开发测试用的原始地图文件
-"whimbox.assets" = ["imgs/Maps/w01_v11.png", "imgs/Maps/w01_v12.png"，"imgs/Maps/w14000000_v2.png", "imgs/Maps/w8000001_v1.png", "imgs/Maps/w4020034.png"]
+"whimbox.assets" = ["imgs/Maps/w01_v11.png", "imgs/Maps/w01_v12.png", "imgs/Maps/w14000000_v2.png", "imgs/Maps/w8000001_v1.png", "imgs/Maps/w4020034.png"]
 
 
