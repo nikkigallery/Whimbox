@@ -169,7 +169,7 @@ IconWardrobeFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=AN
 
 # 能力配置界面
 AreaWardrobeTab3 = Area(anchor=ANCHOR_TOP_CENTER)
-TextWardrobeAbilityTab = Text("能力配置", cap_area = AreaWardrobeTab3)
+# TextWardrobeAbilityTab = Text("能力配置", cap_area = AreaWardrobeTab3)
 IconAbilityFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=ANCHOR_TOP_CENTER)
 ButtonAbilityConfig = ImgIcon(print_log=LOG_ALL, threshold=0.99, anchor=ANCHOR_BOTTOM_RIGHT)
 ButtonAbilityChangeList = Button(print_log=LOG_WHEN_TRUE, threshold=0.75, gray_limit=(250, 255), anchor=ANCHOR_TOP_RIGHT)

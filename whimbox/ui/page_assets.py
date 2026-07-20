@@ -90,7 +90,7 @@ page_zxxy.link("esc", page_daily_task)
 page_xhsg.link("esc", page_daily_task)
 
 page_dress.link("esc", page_main)
-page_dress.link(TextWardrobeAbilityTab, page_ability)
+page_dress.link("e", page_ability)
 
 page_ability.link("esc", page_main)
 
