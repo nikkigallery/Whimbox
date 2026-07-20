@@ -1792,6 +1792,402 @@
                 -295121.21875,
                 -549887.1875
             ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "城门前停泊处",
+            "position": [
+                -546919.4375,
+                -645362.4375
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "磐城门前",
+            "position": [
+                -551448.5,
+                -634322.25
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "行与思广场",
+            "position": [
+                -560604.5625,
+                -626529.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "王迹长廊",
+            "position": [
+                -559014.0625,
+                -613085.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "三殿堂",
+            "position": [
+                -579585.8125,
+                -611343.5625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金时醇酿馆",
+            "position": [
+                -566135.5625,
+                -607388.125
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "演乐花庭",
+            "position": [
+                -553709.6875,
+                -595873.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "晨曦集市",
+            "position": [
+                -574483.375,
+                -593911.75
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "太阳门扉",
+            "position": [
+                -594320.75,
+                -611403.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "街区钟塔",
+            "position": [
+                -591102.9375,
+                -585228.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "圆心街区",
+            "position": [
+                -586437.6875,
+                -578125.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "圆心市场",
+            "position": [
+                -596587.75,
+                -598768.75
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "幼蘑休憩处",
+            "position": [
+                -599142.625,
+                -568502.5625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "巧工园废墟",
+            "position": [
+                -582449.5,
+                -565114.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "环圃一层种植区",
+            "position": [
+                -620586.6875,
+                -574557.875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "丰饶环圃",
+            "position": [
+                -605713.625,
+                -578993.25
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "环圃二层",
+            "position": [
+                -612668.125,
+                -576352.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "糖坊入口",
+            "position": [
+                -613062.4375,
+                -593415.25
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "丰登庆典",
+            "position": [
+                -615342.375,
+                -608893.8125
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "糖坊上层",
+            "position": [
+                -613227.5,
+                -621001.8125
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "集市旁停泊处",
+            "position": [
+                -565217.9375,
+                -575178.5
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭大桥前",
+            "position": [
+                -606034.5,
+                -626370.75
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "咏叹剧院",
+            "position": [
+                -582453.0625,
+                -633561.75
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "剧院二层",
+            "position": [
+                -572488.5,
+                -643565.6875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭角门",
+            "position": [
+                -604614.875,
+                -653507.125
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭前广场",
+            "position": [
+                -593907.125,
+                -670941.4375
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "广场前停泊处",
+            "position": [
+                -575253.6875,
+                -669689.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭顶层露台",
+            "position": [
+                -614653.9375,
+                -672860.5625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭侧方废墟",
+            "position": [
+                -638710.125,
+                -663144.375
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭后门停泊处",
+            "position": [
+                -662190.875,
+                -686352.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭后门",
+            "position": [
+                -624466.125,
+                -678454.5625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "金庭一角",
+            "position": [
+                -639390.875,
+                -696035.625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "启明学庭",
+            "position": [
+                -587034.3125,
+                -695977.5625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "永续识馆",
+            "position": [
+                -564800.5,
+                -699729.0625
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "集贤回廊",
+            "position": [
+                -580072.75,
+                -708760.1875
+            ]
+        },
+        {
+            "region": "磐城",
+            "province": "伊赞之土",
+            "map": "miraland",
+            "type": "teleporter",
+            "name": "学庭郊野",
+            "position": [
+                -549615.75,
+                -708682.9375
+            ]
         }
     ],
     "starsea": [
