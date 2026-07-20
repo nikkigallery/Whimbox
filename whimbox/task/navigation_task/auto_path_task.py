@@ -199,6 +199,7 @@ class AutoPathTask(TaskTemplate):
 
     @register_step("自动跑图中……")
     def step1(self):
+        itt.key_press("alt") # 开始跑图前按一下alt，避免游戏自身偶发bug，鼠标还在大世界界面中
         while not self.need_stop():
             start_time = time.time()
             is_end = self.inner_step_update_target()
@@ -568,7 +569,7 @@ class AutoPathTask(TaskTemplate):
 
 if __name__ == "__main__":
     # task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
-    task = AutoPathTask(session_id="debug", path_name="星海拾光_星光结晶收集_星梦群屿")
+    task = AutoPathTask(session_id="debug", path_name="鎏金蜜鎏金蜜南北绿豆")
     task_result = task.task_run()
     print(task_result.to_dict())
 
