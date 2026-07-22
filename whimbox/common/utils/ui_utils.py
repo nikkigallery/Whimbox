@@ -308,19 +308,32 @@ def wait_until_appear(obj, area=None, retry_time=3):
     return False
 
 
-def back_to_page_main():
+def back_to_page_main(timeout=15.0, max_esc=8):
     # 让UI返回到主界面
     stop_flag = get_current_stop_flag()
+    deadline = time.monotonic() + timeout
+    esc_count = 0
     while not stop_flag.is_set():
+        if time.monotonic() >= deadline or esc_count >= max_esc:
+            logger.warning(
+                f"Timed out returning to the main page; stopping Esc loop "
+                f"(timeout={timeout:.1f}s, esc_count={esc_count})"
+            )
+            return False
+
         itt.wait_until_stable(threshold=0.95)
         if itt.get_img_existence(IconDungeonFeature):
             itt.key_press(keybind.KEYBIND_BACK)
             itt.delay(0.5)
             wait_until_appear_then_click(ButtonDungeonQuitOK, retry_time=1)
         elif itt.get_img_existence(IconPageMainFeature):
-            break
+            return True
         else:
             itt.key_press('esc')
+            esc_count += 1
+            itt.delay(0.35, is_log=False)
+
+    return False
 
 def skip_to_page_main():
     # 采集时，如果遇到没有的东西，会自动弹出获取窗口，不断按f跳过直到回到主界面
@@ -436,5 +449,3 @@ if __name__ == "__main__":
     # print(find_game_img(GameImgStarCrystal, cap, threshold=0.70, scale=1, count=3))
     
     # print(get_daily_reward(AreaXhsgRewards))
-
-    
