@@ -14,7 +14,7 @@ class FairyAnimalTask(TaskTemplate):
             self.update_task_result(status=STATE_TYPE_FAILED, message="切换清洁能力失败")
             return STEP_NAME_FINISH
         itt.right_click()
-        time.sleep(1)
+        time.sleep(5)
 
     def handle_finally(self):
         pass
