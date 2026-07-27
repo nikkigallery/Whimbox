@@ -98,43 +98,6 @@ class ZhaoxiTask(TaskTemplate):
         self.need_cost_energy = 0
         self.done_task_names = []
 
-    def _has_unfinished_task(self, task_name):
-        return any(
-            task["task_name"] == task_name
-            for task in getattr(self, "unfinished_tasks", [])
-        )
-
-    def _refresh_current_score(self, return_to_main=False, timeout=5.0):
-        """Read the score shown by the game instead of estimating it locally."""
-        previous_score = self.current_score
-        last_score = None
-        deadline = time.monotonic() + timeout
-
-        ui_control.goto_page(page_zxxy)
-        itt.delay(1, comment="等待朝夕心愿进度更新")
-        itt.wait_until_stable(threshold=0.99)
-
-        while not self.need_stop():
-            try:
-                last_score = get_daily_score(AreaZxxyScore)
-                if last_score != previous_score or last_score >= 500:
-                    break
-            except Exception as exc:
-                logger.warning(f"读取朝夕心愿实际完成度失败: {exc}")
-
-            if time.monotonic() >= deadline:
-                break
-            time.sleep(0.5)
-
-        if last_score is not None:
-            self.current_score = last_score
-            self.log_to_gui(f"朝夕心愿实际完成度：{self.current_score}/500")
-
-        if return_to_main and self.current_score < 500 and not self.need_stop():
-            ui_control.goto_page(page_main)
-
-        return self.current_score
-
     @register_step("检查朝夕心愿完成情况")
     def step1(self):
         ui_control.goto_page(page_zxxy)
@@ -234,17 +197,15 @@ class ZhaoxiTask(TaskTemplate):
                 break
             task_name = task['task_name']
             if task_name in task_dict:
+                if task_name == DAILY_TASK_COST_ENERGY:
+                    energy_cost = global_config.get("OneDragon", "energy_cost")
+                    if energy_cost == "不消耗剩余体力":
+                        continue
                 task_obj = task_dict[task_name]
                 result = task_obj.task_run()
                 if result.status == STATE_TYPE_SUCCESS:
-                    if task_name == DAILY_TASK_COST_ENERGY:
-                        # CheckEnergyTask only verifies that enough energy exists.
-                        # It does not consume energy, so it must not award 200 points.
-                        self.log_to_gui("体力检查通过，等待实际消耗后再核对完成度")
-                        continue
-
+                    self.current_score += task['score']
                     self.done_task_names.append(task_name)
-                    self._refresh_current_score(return_to_main=True)
                 else:
                     self.log_to_gui(f"任务\"{task_name}\"失败，继续其他任务", is_error=True)
             else:
@@ -253,32 +214,22 @@ class ZhaoxiTask(TaskTemplate):
     @register_step("消耗剩余体力")
     def step4(self):
         energy_cost = global_config.get("OneDragon", "energy_cost")
-        energy_daily_pending = (
-            self.current_score < 500
-            and self._has_unfinished_task(DAILY_TASK_COST_ENERGY)
-        )
         if energy_cost == "不消耗剩余体力":
             self.log_to_gui("已设置不消耗剩余体力，跳过")
         elif energy_cost == "素材激化幻境":
-            if DAILY_TASK_JIHUA not in self.done_task_names or energy_daily_pending:
-                if energy_daily_pending and DAILY_TASK_JIHUA in self.done_task_names:
-                    self.log_to_gui("消耗体力任务尚未完成，再次前往素材激化幻境")
+            if DAILY_TASK_JIHUA not in self.done_task_names:
                 task = daily_task.JihuaTask(session_id=self.session_id)
                 task.task_run()
             else:
                 self.log_to_gui("体力在做日常时以消耗，跳过")
         elif energy_cost == "祝福闪光幻境":
-            if DAILY_TASK_GET_BLESS not in self.done_task_names or energy_daily_pending:
-                if energy_daily_pending and DAILY_TASK_GET_BLESS in self.done_task_names:
-                    self.log_to_gui("消耗体力任务尚未完成，再次前往祝福闪光幻境")
+            if DAILY_TASK_GET_BLESS not in self.done_task_names:
                 task = daily_task.BlessTask(session_id=self.session_id)
                 task.task_run()
             else:
                 self.log_to_gui("体力在做日常时以消耗，跳过")
         elif energy_cost == "魔物试炼幻境":
-            if DAILY_TASK_MONSTER not in self.done_task_names or energy_daily_pending:
-                if energy_daily_pending and DAILY_TASK_MONSTER in self.done_task_names:
-                    self.log_to_gui("消耗体力任务尚未完成，再次前往魔物试炼幻境")
+            if DAILY_TASK_MONSTER not in self.done_task_names:
                 task = daily_task.MonsterTask(session_id=self.session_id)
                 task.task_run()
             else:
@@ -295,7 +246,7 @@ class ZhaoxiTask(TaskTemplate):
         score = get_daily_score(AreaZxxyScore)
         self.current_score = score
         self.log_to_gui(f"朝夕心愿最终完成度：{score}/500")
-        if score < 500:
+        if score != 500:
             self.update_task_result(status=STATE_TYPE_FAILED, message="朝夕心愿未完成")
         else:
             self.update_task_result(message="朝夕心愿已完成")
