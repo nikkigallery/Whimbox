@@ -11,7 +11,6 @@ from whimbox.interaction.interaction_core import itt
 from whimbox.common.logger import logger
 
 import os, time
-import psutil
 
 class StartGameTask(TaskTemplate):
     def __init__(self, session_id):
@@ -89,63 +88,9 @@ class StartGameTask(TaskTemplate):
                         self.log_to_gui("更新游戏完成")
                         break
             elif "启动" in text or "start" in text or "啟動" in text:
-                # Prefer the OCR text center over the historical fixed center.
-                # Launcher layout/DPI changes can leave the fixed point just outside
-                # the live button even though OCR still sees the label correctly.
-                click_position = AreaLaunchButton.center_position()
-                try:
-                    text_boxes = launcher_itt.ocr_and_detect_posi(AreaLaunchButton, padding=20)
-                    for detected_text, box in text_boxes.items():
-                        normalized_text = detected_text.lower()
-                        if "启动" in normalized_text or "start" in normalized_text or "啟動" in normalized_text:
-                            area = AreaLaunchButton.position
-                            click_position = (
-                                area.x1 + (box[0] + box[2]) / 2,
-                                area.y1 + (box[1] + box[3]) / 2,
-                            )
-                            break
-                except Exception as exc:
-                    logger.warning(f"定位启动按钮文字中心失败，使用区域中心: {exc}")
-
-                logger.info(
-                    f"启动按钮点击坐标: {click_position}, "
-                    f"launcher_pid={launcher_handle.pid}, "
-                    f"capture_resolution={launcher_itt.capture_obj.resolution}"
-                )
-
-                launch_confirmed = False
-                for click_attempt in range(1, 4):
-                    launcher_handle.set_foreground()
-                    launcher_itt.move_and_click(click_position)
-                    self.log_to_gui(f"点击启动游戏按钮（第{click_attempt}次）")
-                    time.sleep(3)
-
-                    HANDLE_OBJ.refresh_handle()
-                    game_process_running = bool(HANDLE_OBJ.pid) and psutil.pid_exists(HANDLE_OBJ.pid)
-                    if HANDLE_OBJ.is_alive() or game_process_running:
-                        logger.info(
-                            f"第{click_attempt}次点击后检测到游戏已启动 "
-                            f"(pid={HANDLE_OBJ.pid}, window_ready={bool(HANDLE_OBJ.is_alive())})"
-                        )
-                        launch_confirmed = True
-                        break
-
-                    if not launcher_handle.is_alive():
-                        logger.info(f"第{click_attempt}次点击后启动器窗口已关闭，继续等待游戏")
-                        launch_confirmed = True
-                        break
-
-                    post_click_text = launcher_itt.ocr_single_line(AreaLaunchButton).lower()
-                    logger.info(f"第{click_attempt}次点击后启动器按钮文字: {post_click_text}")
-                    if "运行中" in post_click_text or "启动中" in post_click_text or "正在启动" in post_click_text:
-                        launch_confirmed = True
-                        break
-
-                    logger.warning(f"第{click_attempt}次点击未触发游戏启动，准备重试")
-
-                if not launch_confirmed:
-                    self.task_stop("已识别到启动游戏按钮，但连续点击3次后启动器仍无响应")
-                    return
+                launcher_handle.set_foreground()
+                launcher_itt.move_and_click(AreaLaunchButton.center_position())
+                self.log_to_gui("点击启动游戏按钮")
                 break
         if retry_time <= 0:
             self.task_stop("未找到启动游戏按钮")
@@ -154,11 +99,7 @@ class StartGameTask(TaskTemplate):
     @register_step("等待游戏窗口出现……")
     def step2(self):
         retry_time = 20
-        deadline = time.monotonic() + 120
         while not self.need_stop():
-            if time.monotonic() >= deadline:
-                self.task_stop("点击启动按钮后120秒内未检测到游戏窗口")
-                return
             if HANDLE_OBJ.is_alive():
                 if not HANDLE_OBJ.is_foreground():
                     HANDLE_OBJ.set_foreground()
