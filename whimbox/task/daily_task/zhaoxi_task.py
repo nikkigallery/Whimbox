@@ -197,6 +197,10 @@ class ZhaoxiTask(TaskTemplate):
                 break
             task_name = task['task_name']
             if task_name in task_dict:
+                if task_name == DAILY_TASK_COST_ENERGY:
+                    energy_cost = global_config.get("OneDragon", "energy_cost")
+                    if energy_cost == "不消耗剩余体力":
+                        continue
                 task_obj = task_dict[task_name]
                 result = task_obj.task_run()
                 if result.status == STATE_TYPE_SUCCESS:
@@ -240,6 +244,8 @@ class ZhaoxiTask(TaskTemplate):
         itt.delay(1, comment="等待页面稳定")
         itt.wait_until_stable(threshold=0.99)
         score = get_daily_score(AreaZxxyScore)
+        self.current_score = score
+        self.log_to_gui(f"朝夕心愿最终完成度：{score}/500")
         if score != 500:
             self.update_task_result(status=STATE_TYPE_FAILED, message="朝夕心愿未完成")
         else:
