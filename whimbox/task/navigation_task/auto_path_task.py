@@ -272,6 +272,21 @@ class AutoPathTask(TaskTemplate):
             self.log_to_gui("已回到主界面，重新定位坐标")
             nikki_map.reinit_smallmap()
             back_to_page_main()
+            self.curr_position = nikki_map.get_position()
+            self.last_position = None
+            self.clear_stuck()
+
+            target_point = self.path_points[self.curr_target_point_id]
+            target_dist = euclidean_distance(
+                self.curr_position, target_point.position)
+            if target_dist >= not_teleport_offset:
+                self.log_to_gui("已偏离路线太远，重新开始跑图")
+                self.curr_target_point_id = 0
+                self.target_point = self.path_points[0]
+                self.need_move_mode = MOVE_MODE_WALK
+                self.last_need_move_mode = MOVE_MODE_WALK
+                self.current_game_move_mode = MOVE_MODE_WALK
+                self.last_teleport_point_id = 0
 
 
     def inner_step_update_target(self):
