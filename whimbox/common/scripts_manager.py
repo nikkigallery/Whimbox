@@ -1,7 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal
 import os
 import json
+import math
 
 from whimbox.common.path_lib import SCRIPT_PATH
 from whimbox.common.logger import logger
@@ -30,10 +31,82 @@ class PathPoint(BaseModel):
     action_params: Optional[str] = None
     position: list[float]
 
+class PathLoopSegment(BaseModel):
+    """一段可重复执行的路线。loop_count 表示总执行轮数，0 表示无限循环。"""
+
+    id: str
+    name: Optional[str] = None
+    start_point_id: int
+    end_point_id: int
+    loop_count: int = Field(default=1, ge=0)
+    return_mode: Literal["auto", "teleport", "nearby"] = "auto"
+    nearby_distance: float = Field(default=10.0, gt=0)
+
+
 # 跑图脚本
 class PathRecord(BaseModel):
     info: PathInfo
     points: list[PathPoint]
+    loops: list[PathLoopSegment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_loop_segments(self):
+        if not self.loops:
+            return self
+        if self.info.version != "2.1":
+            raise ValueError("包含循环分段的路线版本必须为2.1")
+
+        point_id_to_index = {point.id: index for index, point in enumerate(self.points)}
+        if len(point_id_to_index) != len(self.points):
+            raise ValueError("路线点位id不能重复")
+
+        loop_ids: set[str] = set()
+        ranges: list[tuple[int, int, str]] = []
+        for segment in self.loops:
+            if not segment.id.strip():
+                raise ValueError("循环分段id不能为空")
+            if segment.id in loop_ids:
+                raise ValueError(f"循环分段id重复: {segment.id}")
+            loop_ids.add(segment.id)
+            if segment.start_point_id not in point_id_to_index:
+                raise ValueError(f"循环起点不存在: {segment.start_point_id}")
+            if segment.end_point_id not in point_id_to_index:
+                raise ValueError(f"循环终点不存在: {segment.end_point_id}")
+
+            start_index = point_id_to_index[segment.start_point_id]
+            end_index = point_id_to_index[segment.end_point_id]
+            if start_index >= end_index:
+                raise ValueError(f"循环分段{segment.id}的起点必须位于终点之前")
+            start_point = self.points[start_index]
+            end_point = self.points[end_index]
+            if start_point.point_type != "TARGET" or end_point.point_type != "TARGET":
+                raise ValueError(f"循环分段{segment.id}的起点和终点必须是必经点")
+            resolved_return_mode = segment.return_mode
+            if resolved_return_mode == "auto":
+                resolved_return_mode = (
+                    "teleport" if start_point.action == "TELEPORT" else "nearby"
+                )
+            if resolved_return_mode == "teleport" and start_point.action != "TELEPORT":
+                raise ValueError(f"循环分段{segment.id}使用传送返回时，起点动作必须是TELEPORT")
+            if resolved_return_mode == "nearby":
+                distance = math.dist(start_point.position[:2], end_point.position[:2])
+                if distance > segment.nearby_distance:
+                    raise ValueError(
+                        f"循环分段{segment.id}首尾距离{distance:.2f}，"
+                        f"超过允许值{segment.nearby_distance:.2f}"
+                    )
+            if segment.loop_count == 0 and end_index != len(self.points) - 1:
+                raise ValueError(f"无限循环分段{segment.id}必须以路线最后一个点为终点")
+            ranges.append((start_index, end_index, segment.id))
+
+        ranges.sort(key=lambda item: item[0])
+        for previous, current in zip(ranges, ranges[1:]):
+            if current[0] <= previous[1]:
+                raise ValueError(
+                    f"路线循环分段不能重叠: {previous[2]} 与 {current[2]}"
+                )
+        return self
+
 
 # 宏脚本信息
 class MacroInfo(ScriptInfo):
@@ -53,7 +126,55 @@ class MacroStep(BaseModel):
 # 宏脚本
 class MacroRecord(BaseModel):
     info: MacroInfo
-    steps: list[MacroStep] = []  # 操作步骤列表
+    steps: list[MacroStep] = Field(default_factory=list)  # 操作步骤列表
+
+    @model_validator(mode="after")
+    def validate_loop_structure(self):
+        max_depth, _ = analyze_macro_steps(self.steps)
+        if max_depth > 1 and self.info.version != "3.1":
+            raise ValueError("包含嵌套循环的宏版本必须为3.1")
+        return self
+
+
+MAX_MACRO_LOOP_DEPTH = 8
+MAX_MACRO_EXPANDED_STEPS = 1_000_000
+
+
+def analyze_macro_steps(steps: list[MacroStep]) -> tuple[int, int]:
+    """校验扁平宏循环范围，并返回最大嵌套深度和理论展开步骤数。"""
+
+    def walk(start: int, end: int, depth: int) -> tuple[int, int]:
+        if depth > MAX_MACRO_LOOP_DEPTH:
+            raise ValueError(f"宏循环嵌套不能超过{MAX_MACRO_LOOP_DEPTH}层")
+        max_depth = depth
+        expanded_steps = 0
+        index = start
+        while index < end:
+            step = steps[index]
+            if step.type != "loop":
+                expanded_steps += 1
+                index += 1
+                continue
+
+            if not step.loop_count or step.loop_count < 1:
+                raise ValueError(f"第{index + 1}步循环次数必须大于0")
+            if not step.loop_steps or step.loop_steps < 1:
+                raise ValueError(f"第{index + 1}步循环范围必须至少包含1个步骤")
+            body_end = index + 1 + step.loop_steps
+            if body_end > end:
+                raise ValueError(f"第{index + 1}步循环范围超出当前父循环")
+
+            child_depth, child_expanded = walk(index + 1, body_end, depth + 1)
+            max_depth = max(max_depth, child_depth)
+            expanded_steps += child_expanded * step.loop_count
+            if expanded_steps > MAX_MACRO_EXPANDED_STEPS:
+                raise ValueError(
+                    f"宏理论执行步骤不能超过{MAX_MACRO_EXPANDED_STEPS}"
+                )
+            index = body_end
+        return max_depth, expanded_steps
+
+    return walk(0, len(steps), 0)
 
 
 class ScriptsManager:

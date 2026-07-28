@@ -38,7 +38,13 @@ def handle_script_method(method: str, params: Dict[str, Any]) -> Any:
             return_one=False,
             show_default=show_default,
         )
-        return [{"info": _serialize_script_info(record)} for record in paths]
+        return [
+            {
+                "info": _serialize_script_info(record),
+                "loops": [loop.model_dump() for loop in record.loops],
+            }
+            for record in paths
+        ]
 
     if method == "script.query_macro":
         name = params.get("name")

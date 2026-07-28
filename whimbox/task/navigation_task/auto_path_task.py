@@ -40,30 +40,43 @@ class AutoPathClickSkipMonitor(BaseThreading):
 
 
 class AutoPathTask(TaskTemplate):
-    def __init__(self, session_id, path_record: PathRecord=None, path_name: str=None, excepted_num=None, should_magnet=False):
+    def __init__(
+        self,
+        session_id,
+        path_record: PathRecord=None,
+        path_name: str=None,
+        excepted_num=None,
+        should_magnet=False,
+        loop_overrides: dict[str, int] | None = None,
+    ):
         super().__init__(session_id=session_id, name="auto_path_task")
         self.excepted_num = excepted_num # 期望的素材数量，获取到该数量后就停止
         self.should_magnet = should_magnet
+        self.loop_overrides = loop_overrides or {}
         self.step_sleep = 0.01
         if path_record is not None:
             self.path_info = path_record.info
             self.path_points = copy.deepcopy(path_record.points)
+            self.path_loops = copy.deepcopy(path_record.loops)
         elif path_name is not None:
             path_record = scripts_manager.query_path(path_name=path_name, return_one=True)
             if path_record is None:
                 raise ValueError(f"路线\"{path_name}\"不存在，请先下载该路线")
             self.path_info = path_record.info
             self.path_points = copy.deepcopy(path_record.points)
+            self.path_loops = copy.deepcopy(path_record.loops)
         else:
             raise ValueError("path_record和path_name不能同时为空")
         
-        if self.path_info.version != "2.0":
+        if self.path_info.version not in ("2.0", "2.1"):
             raise ValueError("路线版本不匹配，请更新路线")
         
         # 路线脚本中的坐标为游戏原生坐标，whimbox使用时需要转换为图片像素坐标
         for point in self.path_points:
             pngmap_position = convert_GameLoc_to_PngMapPx(point.position, self.path_info.map)
             point.position = [pngmap_position[0], pngmap_position[1]]
+
+        self._init_loop_segments()
         
         # 各种状态记录
         self.stuck_time = None
@@ -99,6 +112,84 @@ class AutoPathTask(TaskTemplate):
                 self.material_count_dict[key] += value
             else:
                 self.material_count_dict[key] = value
+
+    def _init_loop_segments(self):
+        point_id_to_index = {
+            point.id: index for index, point in enumerate(self.path_points)
+        }
+        self.loop_by_end_index: dict[int, dict] = {}
+        self.loop_states: dict[str, dict] = {}
+        for segment in self.path_loops:
+            override = self.loop_overrides.get(segment.id)
+            if override is not None:
+                if not isinstance(override, int) or override < 0:
+                    raise ValueError(f"循环分段{segment.id}的覆盖次数必须是非负整数")
+                segment.loop_count = override
+
+            start_index = point_id_to_index[segment.start_point_id]
+            end_index = point_id_to_index[segment.end_point_id]
+            start_point = self.path_points[start_index]
+            end_point = self.path_points[end_index]
+            return_mode = segment.return_mode
+            if return_mode == "auto":
+                return_mode = (
+                    "teleport" if start_point.action == ACTION_TELEPORT else "nearby"
+                )
+            if return_mode == "teleport" and start_point.action != ACTION_TELEPORT:
+                raise ValueError(
+                    f"循环分段{segment.id}使用传送返回时，起点必须是传送点"
+                )
+            runtime_segment = {
+                "segment": segment,
+                "start_index": start_index,
+                "end_index": end_index,
+                "return_mode": return_mode,
+            }
+            self.loop_by_end_index[end_index] = runtime_segment
+            self.loop_states[segment.id] = {
+                "completed_count": 0,
+                "finished": False,
+            }
+
+    def _has_reached_expected_num(self):
+        return (
+            self.excepted_num is not None
+            and self.path_info.target
+            and self.path_info.target in self.material_count_dict
+            and self.material_count_dict[self.path_info.target] >= self.excepted_num
+        )
+
+    def _handle_loop_segment_end(self) -> bool:
+        runtime_segment = self.loop_by_end_index.get(self.curr_target_point_id)
+        if runtime_segment is None or self._has_reached_expected_num():
+            return False
+
+        segment = runtime_segment["segment"]
+        state = self.loop_states[segment.id]
+        if state["finished"]:
+            return False
+
+        state["completed_count"] += 1
+        total_text = "∞" if segment.loop_count == 0 else str(segment.loop_count)
+        self.log_to_gui(
+            f"循环分段「{segment.name or segment.id}」"
+            f"完成第 {state['completed_count']}/{total_text} 轮"
+        )
+        if segment.loop_count > 0 and state["completed_count"] >= segment.loop_count:
+            state["finished"] = True
+            return False
+
+        self.stop_move()
+        self.change_to_walk()
+        self.last_position = None
+        self.curr_position = None
+        self.clear_stuck()
+        self.curr_target_point_id = runtime_segment["start_index"]
+        self.target_point = self.path_points[self.curr_target_point_id]
+        self.need_move_mode = MOVE_MODE_WALK
+        self.last_need_move_mode = MOVE_MODE_WALK
+        self.current_game_move_mode = MOVE_MODE_WALK
+        return True
 
     def task_stop(self, message="手动停止跑图"):
         if not self.need_stop():
@@ -206,10 +297,8 @@ class AutoPathTask(TaskTemplate):
             if is_end:
                 break
             # 采集到预期数量的素材后，也可以停止跑图流程
-            if self.excepted_num is not None:
-                if self.path_info.target and self.path_info.target in self.material_count_dict \
-                and self.material_count_dict[self.path_info.target] >= self.excepted_num:
-                    break
+            if self._has_reached_expected_num():
+                break
             if self.need_stop():
                 break
             self.inner_step_change_view()
@@ -469,6 +558,9 @@ class AutoPathTask(TaskTemplate):
                 # 如果进行过动作就清除卡住状态，因为有些动作是很耗时的
                 self.clear_stuck()
 
+            if self._handle_loop_segment_end():
+                return False
+
             if self.curr_target_point_id >= len(self.path_points) - 1:
                 # 走到终点了
                 is_end = True
@@ -568,13 +660,23 @@ class AutoPathTask(TaskTemplate):
 
     @register_step("结束自动跑图")
     def step2(self):
+        loop_summaries = []
+        for segment in self.path_loops:
+            state = self.loop_states[segment.id]
+            loop_summaries.append(
+                f"{segment.name or segment.id} {state['completed_count']}轮"
+            )
         if len(self.material_count_dict) > 0:
             message = "自动跑图完成，获得材料："
             res = []
             for material_name, count in self.material_count_dict.items():
                 res.append(f"{material_name} x {count}")
             message += ", ".join(res)
-            self.update_task_result(message=message)
+        else:
+            message = "自动跑图完成"
+        if loop_summaries:
+            message += "；循环：" + "，".join(loop_summaries)
+        self.update_task_result(message=message)
 
 
     def handle_finally(self):

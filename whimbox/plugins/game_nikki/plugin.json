@@ -103,7 +103,17 @@
       "description": "运行指定的跑图路线",
       "input_schema": {
         "type": "object",
-        "properties": { "path_name": { "type": "string", "description": "路线名" } },
+        "properties": {
+          "path_name": { "type": "string", "description": "路线名" },
+          "loop_overrides": {
+            "type": "object",
+            "description": "按循环分段id临时覆盖循环总次数，0表示无限循环",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
         "required": ["path_name"]
       },
       "output_schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" }, "data": {} } }

@@ -227,10 +227,11 @@ def run_load_path(session_id: str, input: Dict[str, Any], context: Dict[str, Any
     path_record = scripts_manager.query_path(path_name=path_name, return_one=True)
     if path_record is None:
         return _error(f"路线\"{path_name}\"不存在")
+    loop_overrides = input.get("loop_overrides")
     return TaskAdapter.run(
         AutoPathTask,
         session_id,
-        {"path_record": path_record},
+        {"path_record": path_record, "loop_overrides": loop_overrides},
         context,
     )
 
