@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal
 import os
 import json
-import math
 
 from whimbox.common.path_lib import SCRIPT_PATH
 from whimbox.common.logger import logger
@@ -39,8 +38,6 @@ class PathLoopSegment(BaseModel):
     start_point_id: int
     end_point_id: int
     loop_count: int = Field(default=1, ge=0)
-    return_mode: Literal["auto", "teleport", "nearby"] = "auto"
-    nearby_distance: float = Field(default=10.0, gt=0)
 
 
 # 跑图脚本
@@ -81,20 +78,6 @@ class PathRecord(BaseModel):
             end_point = self.points[end_index]
             if start_point.point_type != "TARGET" or end_point.point_type != "TARGET":
                 raise ValueError(f"循环分段{segment.id}的起点和终点必须是必经点")
-            resolved_return_mode = segment.return_mode
-            if resolved_return_mode == "auto":
-                resolved_return_mode = (
-                    "teleport" if start_point.action == "TELEPORT" else "nearby"
-                )
-            if resolved_return_mode == "teleport" and start_point.action != "TELEPORT":
-                raise ValueError(f"循环分段{segment.id}使用传送返回时，起点动作必须是TELEPORT")
-            if resolved_return_mode == "nearby":
-                distance = math.dist(start_point.position[:2], end_point.position[:2])
-                if distance > segment.nearby_distance:
-                    raise ValueError(
-                        f"循环分段{segment.id}首尾距离{distance:.2f}，"
-                        f"超过允许值{segment.nearby_distance:.2f}"
-                    )
             if segment.loop_count == 0 and end_index != len(self.points) - 1:
                 raise ValueError(f"无限循环分段{segment.id}必须以路线最后一个点为终点")
             ranges.append((start_index, end_index, segment.id))

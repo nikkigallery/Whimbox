@@ -47,12 +47,10 @@ class AutoPathTask(TaskTemplate):
         path_name: str=None,
         excepted_num=None,
         should_magnet=False,
-        loop_overrides: dict[str, int] | None = None,
     ):
         super().__init__(session_id=session_id, name="auto_path_task")
         self.excepted_num = excepted_num # 期望的素材数量，获取到该数量后就停止
         self.should_magnet = should_magnet
-        self.loop_overrides = loop_overrides or {}
         self.step_sleep = 0.01
         if path_record is not None:
             self.path_info = path_record.info
@@ -120,30 +118,15 @@ class AutoPathTask(TaskTemplate):
         self.loop_by_end_index: dict[int, dict] = {}
         self.loop_states: dict[str, dict] = {}
         for segment in self.path_loops:
-            override = self.loop_overrides.get(segment.id)
-            if override is not None:
-                if not isinstance(override, int) or override < 0:
-                    raise ValueError(f"循环分段{segment.id}的覆盖次数必须是非负整数")
-                segment.loop_count = override
-
             start_index = point_id_to_index[segment.start_point_id]
             end_index = point_id_to_index[segment.end_point_id]
             start_point = self.path_points[start_index]
             end_point = self.path_points[end_index]
-            return_mode = segment.return_mode
-            if return_mode == "auto":
-                return_mode = (
-                    "teleport" if start_point.action == ACTION_TELEPORT else "nearby"
-                )
-            if return_mode == "teleport" and start_point.action != ACTION_TELEPORT:
-                raise ValueError(
-                    f"循环分段{segment.id}使用传送返回时，起点必须是传送点"
-                )
+            resolve_loop_return_mode(start_point, end_point)
             runtime_segment = {
                 "segment": segment,
                 "start_index": start_index,
                 "end_index": end_index,
-                "return_mode": return_mode,
             }
             self.loop_by_end_index[end_index] = runtime_segment
             self.loop_states[segment.id] = {
