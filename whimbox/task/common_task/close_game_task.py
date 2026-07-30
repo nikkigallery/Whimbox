@@ -13,8 +13,7 @@ class CloseGameTask(TaskTemplate):
     @register_step("关闭叠纸启动器")
     def step2(self):
         launcher_handle = ProcessHandler(process_name=PAPER_LAUNCHER_NAME)
-        if launcher_handle.get_handle():
-            launcher_handle.close_handle()
+        launcher_handle.close_handle()
 
     def handle_finally(self):
         pass

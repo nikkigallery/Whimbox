@@ -87,7 +87,7 @@ class ProcessHandler:
         return pid
 
     def close_handle(self) -> None:
-        """Close the game window gracefully, escalating to process termination."""
+        """Close the application gracefully, escalating to process termination."""
         pid = self._get_process_pid()
         process: Optional[psutil.Process] = None
         if pid is not None:
@@ -105,9 +105,6 @@ class ProcessHandler:
             logger.error(exc)
 
         for _ in range(10):
-            if not self.is_alive():
-                self.refresh_handle()
-                return
             if process is not None:
                 try:
                     if not process.is_running():
@@ -119,13 +116,16 @@ class ProcessHandler:
                 except Exception as exc:
                     logger.warning(f"检查进程状态失败: {exc}")
                     break
+            elif not self.is_alive():
+                self.refresh_handle()
+                return
             time.sleep(0.2)
 
         if process is None:
             return
 
         try:
-            logger.warning(f"窗口关闭失败，尝试结束进程: pid={process.pid}")
+            logger.warning(f"进程未在等待时间内退出，尝试结束进程: pid={process.pid}")
             process.terminate()
             try:
                 process.wait(timeout=2)
