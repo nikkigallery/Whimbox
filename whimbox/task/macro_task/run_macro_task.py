@@ -24,8 +24,8 @@ class RunMacroTask(TaskTemplate):
         self.macro_record = scripts_manager.query_macro(macro_filename, return_one=True)
         if not self.macro_record:
             raise ValueError(f"宏\"{macro_filename}\"不存在，请先下载该宏")
-        if self.macro_record and self.macro_record.info.version != "3.0":
-            raise ValueError(f"宏版本不匹配，请更新宏")
+        if self.macro_record.info.version not in ("3.0", "3.1"):
+            raise ValueError(f"宏版本不匹配，请更新宏（当前版本：{self.macro_record.info.version}）")
         self.is_play_music = False
         if self.macro_record.info.type == "乐谱":
             self.is_play_music = True
@@ -80,16 +80,36 @@ class RunMacroTask(TaskTemplate):
         itt.key_up(release_step.key)
         self.pressing_keys.discard(release_step.key)
 
-    def _execute_steps(self, steps: list[MacroStep]):
-        """顺序执行步骤，支持拖拽段平滑回放。"""
-        i = 0
-        while i < len(steps):
+    def _execute_range(
+        self,
+        steps: list[MacroStep],
+        start: int = 0,
+        end: int | None = None,
+        depth: int = 0,
+    ):
+        """递归执行指定范围，循环体可以继续包含循环。"""
+        end = len(steps) if end is None else end
+        i = start
+        while i < end:
             if self.need_stop() or (self.check_stop_func and self.check_stop_func()):
-                break
+                return
 
             step = steps[i]
+            self.current_step_index = i
+            if step.type == "loop":
+                body_end = i + 1 + int(step.loop_steps or 0)
+                for iteration in range(int(step.loop_count or 0)):
+                    if self.need_stop() or (self.check_stop_func and self.check_stop_func()):
+                        return
+                    self.log_to_gui(
+                        f"{'  ' * depth}循环第 {iteration + 1}/{step.loop_count} 次"
+                    )
+                    self._execute_range(steps, i + 1, body_end, depth + 1)
+                i = body_end
+                continue
+
             drag_release_info = self._find_drag_release_step(steps, i)
-            if drag_release_info:
+            if drag_release_info and drag_release_info[0] < end:
                 release_index, drag_duration = drag_release_info
                 self._execute_drag_step(step, steps[release_index], drag_duration)
                 i = release_index + 1
@@ -97,6 +117,10 @@ class RunMacroTask(TaskTemplate):
 
             self._execute_step(step)
             i += 1
+
+    def _execute_steps(self, steps: list[MacroStep]):
+        """兼容旧调用入口。"""
+        self._execute_range(steps)
     
     def _execute_step(self, step: MacroStep):
         """执行单个宏步骤"""
@@ -196,55 +220,8 @@ class RunMacroTask(TaskTemplate):
         # 执行宏操作
         start_time = time.time()
         
-        i = 0
-        while i < len(self.macro_record.steps):
-            if self.need_stop():
-                break
-            if self.check_stop_func and self.check_stop_func():
-                break
-            
-            step = self.macro_record.steps[i]
-            self.current_step_index = i
+        self._execute_range(self.macro_record.steps)
 
-            # 处理循环步骤
-            if step.type == "loop":
-                if step.loop_count and step.loop_steps:
-                    loop_start_index = i + 1
-                    loop_end_index = min(i + 1 + step.loop_steps, len(self.macro_record.steps))
-                    
-                    self.log_to_gui(f"开始循环宏: 从步骤 {loop_start_index} 到 {loop_end_index-1}, 循环 {step.loop_count} 次")
-                    
-                    # 获取循环内的步骤
-                    loop_steps = self.macro_record.steps[loop_start_index:loop_end_index]
-                    if not loop_steps:
-                        logger.warning(f"循环范围为空，跳过")
-                        i += 1
-                        continue
-                    
-                    # 执行循环
-                    for loop_iteration in range(step.loop_count):
-                        if self.need_stop() or (self.check_stop_func and self.check_stop_func()):
-                            break
-                        
-                        self.log_to_gui(f"循环第 {loop_iteration + 1}/{step.loop_count} 次")
-                        self._execute_steps(loop_steps)
-                    
-                    # 跳过已经循环执行的步骤
-                    i = loop_end_index
-                    continue
-                else:
-                    logger.warning(f"循环步骤缺少必要参数: loop_count={step.loop_count}, loop_steps={step.loop_steps}")
-            else:
-                drag_release_info = self._find_drag_release_step(self.macro_record.steps, i)
-                if drag_release_info:
-                    release_index, drag_duration = drag_release_info
-                    self._execute_drag_step(step, self.macro_record.steps[release_index], drag_duration)
-                    i = release_index + 1
-                    continue
-                self._execute_step(step)
-            
-            i += 1
-        
         execution_time = time.time() - start_time
         self.log_to_gui(f"宏执行结束！耗时: {execution_time:.2f}秒")
     

@@ -103,7 +103,9 @@
       "description": "运行指定的跑图路线",
       "input_schema": {
         "type": "object",
-        "properties": { "path_name": { "type": "string", "description": "路线名" } },
+        "properties": {
+          "path_name": { "type": "string", "description": "路线名" }
+        },
         "required": ["path_name"]
       },
       "output_schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" }, "data": {} } }

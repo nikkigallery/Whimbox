@@ -125,6 +125,8 @@ def run_zhaoxi(session_id: str, input: Dict[str, Any], context: Dict[str, Any]) 
 def run_search_path(session_id: str, input: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     name = input.get("name")
     target = input.get("target")
+    name = name.strip() if isinstance(name, str) and name.strip() else None
+    target = target.strip() if isinstance(target, str) and target.strip() else None
 
     path_items = scripts_manager.search_path_items(
         name=name,
@@ -141,6 +143,49 @@ def run_search_path(session_id: str, input: Dict[str, Any], context: Dict[str, A
             name=name,
             is_play_music=True,
         )
+
+    # name/target 由大语言模型判断，偶尔会被放进错误的字段。
+    # 保留首次查询的严格语义；只有找不到路线时，才让每个关键词分别匹配
+    # 路线名和目标素材名，避免字段误判直接导致无结果。
+    relaxed_search = False
+    if not path_items and (name or target):
+        keywords = list(dict.fromkeys(keyword for keyword in (name, target) if keyword))
+        relaxed_path_items = []
+        seen_path_names = set()
+
+        for keyword in keywords:
+            for search_kwargs in ({"name": keyword}, {"target": keyword}):
+                for item in scripts_manager.search_path_items(**search_kwargs):
+                    path_name = item.get("path_name")
+                    if path_name in seen_path_names:
+                        continue
+                    seen_path_names.add(path_name)
+                    relaxed_path_items.append(item)
+                    if len(relaxed_path_items) >= 5:
+                        break
+                if len(relaxed_path_items) >= 5:
+                    break
+            if len(relaxed_path_items) >= 5:
+                break
+
+        if relaxed_path_items:
+            path_items = relaxed_path_items
+            relaxed_search = True
+
+        # target 也可能实际是宏名或乐谱名；仅在首次路线查询失败时补查。
+        if target and target != name:
+            if not macro_items:
+                macro_items = scripts_manager.search_macro_items(
+                    name=target,
+                    is_play_music=False,
+                )
+            if not music_items:
+                music_items = scripts_manager.search_macro_items(
+                    name=target,
+                    is_play_music=True,
+                )
+            if macro_items or music_items:
+                relaxed_search = True
 
     items = (
         [{"item_type": "path", **item} for item in path_items]
@@ -166,9 +211,10 @@ def run_search_path(session_id: str, input: Dict[str, Any], context: Dict[str, A
     if music_count:
         summary_parts.append(f"乐谱 {music_count} 条")
 
+    message_prefix = "严格条件无匹配，已自动放宽关键词字段；" if relaxed_search else ""
     return {
         "status": STATE_TYPE_SUCCESS,
-        "message": f"已找到 {len(items)} 条候选脚本（{'，'.join(summary_parts)}）",
+        "message": f"{message_prefix}已找到 {len(items)} 条候选脚本（{'，'.join(summary_parts)}）",
         "items": items,
     }
 

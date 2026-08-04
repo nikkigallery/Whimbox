@@ -39,6 +39,7 @@ class AllInOneTask(TaskTemplate):
     def __init__(self, session_id):
         super().__init__(session_id=session_id, name="all_in_one_task")
         self.is_already_in_game = False
+        self.is_in_home = True
         self.default_step_states = {
             key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
         }
@@ -284,6 +285,19 @@ class AllInOneTask(TaskTemplate):
             self._append_custom_step_result(result_list, step, STEP_RESULT_FAILED, message)
         return None
 
+    def check_in_home(self):
+        if not self.is_in_home:
+            return
+        self.log_to_gui("检查是否在家园")
+        from whimbox.map.map import nikki_map
+        if not nikki_map.small_map_init_flag:
+            nikki_map.reinit_smallmap()
+        if nikki_map.map_name == MAP_NAME_HOME:
+            self.log_to_gui("传送到大世界")
+            loc = convert_GameLoc_to_PngMapPx([-13172.34765625, -54273.6171875], MAP_NAME_MIRALAND)
+            nikki_map.bigmap_tp(loc, MAP_NAME_MIRALAND)
+        self.is_in_home = False
+
     @register_step("自动启动游戏")
     def step_start_game(self):
         start_game_task = StartGameTask(session_id=self.session_id)
@@ -331,16 +345,6 @@ class AllInOneTask(TaskTemplate):
             self.log_to_gui("今日有巨陨星❗")
             self.has_meteor_today = True
 
-    # @register_step("检查是否在家园")
-    # def step_check_in_home(self):
-    #     from whimbox.map.map import nikki_map
-    #     if not nikki_map.small_map_init_flag:
-    #         nikki_map.reinit_smallmap()
-    #     if nikki_map.map_name == MAP_NAME_HOME:
-    #         self.log_to_gui("传送到大世界")
-    #         loc = convert_GameLoc_to_PngMapPx([-13172.34765625, -54273.6171875], MAP_NAME_MIRALAND)
-    #         nikki_map.bigmap_tp(loc, MAP_NAME_MIRALAND)
-
     @register_step("检查周本进度")
     def step2(self):
         weekly_realm_task = daily_task.WeeklyRealmTask(session_id=self.session_id)
@@ -368,11 +372,18 @@ class AllInOneTask(TaskTemplate):
     @register_step("开始完成奇迹之冠巅峰赛")
     def step6(self):
         mira_crown_task = MiraCrownTask(session_id=self.session_id)
-        task_result = mira_crown_task.task_run()
-        self._set_default_step_result("step_mira_crown", task_result)
+        if mira_crown_task.check_mira_crown():
+            self.check_in_home()
+            task_result = mira_crown_task.task_run()
+            self._set_default_step_result("step_mira_crown", task_result)
+        else:
+            self._set_default_step_result("step_mira_crown", TaskResult(
+                status=STATE_TYPE_SUCCESS, message="奇迹之冠巅峰赛已做过，直接跳过"
+                ))
 
     @register_step("领取奇迹之旅奖励")
     def step7(self):
+        self.check_in_home()
         monthly_pass_task = daily_task.MonthlyPassTask(session_id=self.session_id)
         task_result = monthly_pass_task.task_run()
         self._set_default_step_result("step_monthly_pass", task_result)
@@ -418,6 +429,7 @@ class AllInOneTask(TaskTemplate):
 
     @register_step("当前账号一条龙已完成")
     def step_finish_account(self):
+        self.is_in_home = True # 重置是否在家园的状态
         self._snapshot_current_account_result()
         self.finished_account_list.append(self.current_account)
         if len(self.account_list) <= len(self.finished_account_list):

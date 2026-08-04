@@ -9,13 +9,11 @@ from whimbox.interaction.interaction_core import itt
 import time
 
 class MiraCrownTask(TaskTemplate):
-    def __init__(self, session_id, force_start=False):
+    def __init__(self, session_id):
         super().__init__(session_id=session_id, name="mira_crown_task")
-        self.force_start = force_start
         self.is_quick_reward = False
     
-    @register_step("检查奇迹之冠巅峰赛进度")
-    def step1(self):
+    def check_mira_crown(self):
         ui_control.goto_page(page_daily_task)
         text = itt.ocr_single_line(AreaMiraCrownOverview)
         count_str = text.replace('v', '').replace('V', '').replace(' ', '')
@@ -23,17 +21,21 @@ class MiraCrownTask(TaskTemplate):
             finished_count = int(count_str.split("/")[0])
             total_count = int(count_str.split("/")[1])
         except:
-            raise Exception(f"检查奇迹之冠巅峰赛进度识别异常:{count_str}")
+            self.log_to_gui(f"检查奇迹之冠巅峰赛进度识别异常:{count_str}", is_error=True)
+            return False
         self.log_to_gui(f"奇迹之冠巅峰赛进度为{finished_count}/{total_count}")
-        if finished_count != 0 and not self.force_start:
-            self.update_task_result(message=f"奇迹之冠巅峰赛已做过，直接跳过")
-            return STEP_NAME_FINISH
+        if finished_count != 0:
+            self.log_to_gui("奇迹之冠巅峰赛已做过，直接跳过")
+            return False
         else:
-            return
+            return True
 
     @register_step("进入奇迹之冠巅峰赛")
-    def step2(self):
-        AreaMiraCrownOverview.click()
+    def step1(self):
+        ui_control.goto_page(page_esc)
+        if not scroll_find_click(AreaEscEntrances, "奇迹之冠"):
+            raise Exception("奇迹之冠入口未找到")
+        # AreaMiraCrownOverview.click()
         itt.wait_until_stable(0.95)
         AreaMiraCrownEntrance.click()
         itt.wait_until_stable(0.95)
@@ -54,7 +56,7 @@ class MiraCrownTask(TaskTemplate):
         itt.wait_until_stable(0.95)
         itt.move_to((0, 0)) # 移走鼠标，避免触发某些ui的悬停效果，影响识别
         if wait_until_appear_then_click(ButtonMiraCrownStartChallenge):
-            itt.wait_until_stable(threshold=0.95)
+            itt.delay(1, comment="等待跳转")
             ui_control.ui_additional()
             if not wait_until_appear(IconPageMainFeature, retry_time=10):
                 raise Exception("未进入奇迹之冠巅峰赛内部")
@@ -169,7 +171,7 @@ class MiraCrownTask(TaskTemplate):
                 
 
 if __name__ == "__main__":
-    task = MiraCrownTask(session_id="debug", force_start=True)
+    task = MiraCrownTask(session_id="debug")
     result = task.task_run()
     print(result.to_dict())
     # task.step6()

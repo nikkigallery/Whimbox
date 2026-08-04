@@ -9,6 +9,7 @@ from whimbox.ui.page import TitlePage
 from whimbox.common.utils.ui_utils import back_to_page_main
 from whimbox.common.cvars import get_current_stop_flag
 
+import time
 from threading import Lock
 
 class UI():
@@ -57,6 +58,30 @@ class UI():
 
     def verify_page(self, page: UIPage) -> bool:
         return page.is_current_page(itt)
+
+    def wait_for_page(self, page: UIPage, timeout=5.0, interval=0.25) -> bool:
+        """Poll for a destination page while its entrance animation finishes."""
+        stop_flag = get_current_stop_flag()
+        deadline = time.monotonic() + timeout
+        attempts = 0
+
+        while not stop_flag.is_set():
+            attempts += 1
+            if page.is_current_page(itt):
+                if attempts > 1:
+                    logger.info(f"Reached {page} after {attempts} verification attempts")
+                return True
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning(
+                    f"Timed out after {timeout:.1f}s waiting for {page} "
+                    f"({attempts} verification attempts)"
+                )
+                return False
+            time.sleep(min(interval, remaining))
+
+        return False
 
     def goto_page(self, target_page: UIPage, retry_times=0, max_retry=1):
         from collections import deque
@@ -160,7 +185,7 @@ class UI():
                 itt.move_to((0, 0))
 
                 # Verify we reached the expected page
-                if not to_page.is_current_page(itt):
+                if not self.wait_for_page(to_page, timeout=5.0):
                     logger.warning(f"Expected to be at {to_page}, but verification failed. Retrying...")
                     success = False
                     break

@@ -25,10 +25,10 @@ if __name__ == "__main__":
     from whimbox.common.cvars import IMG_RATE
     from whimbox.common.utils import ui_utils
     from whimbox.ui.page_assets import *
-    # cap = cv2.imread(os.path.join(ROOT_PATH, "..", "tools", "bug", "8898144a11397423757472505a075027.png"))
-    # cap = cv2.resize(cap, (1920, 1200))
-    # cap = crop(cap, IconDailyRewardFeature2.cap_posi)
-    # print(itt.get_img_existence(IconDailyRewardFeature2, cap=cap, ret_mode=IMG_RATE, show_res=True))
+    # cap = cv2.imread(os.path.join(ROOT_PATH, "..", "tools", "snapshot", "bug", "bug2.png"))
+    # cap = cv2.resize(cap, (1920, 1080))
+    # cap = crop(cap, ButtonItemExpiredConfirm.cap_posi)
+    # print(itt.get_img_existence(ButtonItemExpiredConfirm, cap=cap, ret_mode=IMG_RATE, show_res=True))
     while True:
         print(itt.get_img_existence(ButtonItemPlaceableItem, ret_mode=IMG_RATE, show_res=True))
         # cv2.imshow("cap", itt.capture(AreaBlessHuanjingDifficulty3.position))

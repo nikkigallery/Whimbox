@@ -9,6 +9,8 @@ from whimbox.common.utils.posi_utils import euclidean_distance_plist
 from whimbox.common.errors import FunctionModeError
 from whimbox.common.utils.asset_utils import AnchorPosi
 
+# 去掉图片大小限制的告警，地图资源已经大于默认限制值
+Image.MAX_IMAGE_PIXELS = None
 
 def load_image(file, area=None):
     """

@@ -30,6 +30,9 @@ TextExitBackLoginButton = Text("返回登录", cap_area = AreaExitBackLoginButto
 ButtonExitLogout = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,200], [179,80,255]), anchor=ANCHOR_TOP_RIGHT)
 ButtonLogin = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,180], [30,255,255]), anchor=ANCHOR_BOTTOM_CENTER)
 AreaLoginAccountList = Area(anchor=ANCHOR_CENTER)
+AreaUnexceptedPopupConfirm = Area(anchor=ANCHOR_CENTER)
+TextUnexceptedPopupConfirm = Text("确认", cap_area = AreaUnexceptedPopupConfirm)
+ButtonItemExpiredConfirm = Button(print_log=LOG_ALL, anchor=ANCHOR_CENTER)
 # 聊天框特征
 IconPageChatFeature = ImgIcon(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 ButtonPageChatClose = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_TOP_LEFT)
@@ -166,7 +169,7 @@ IconWardrobeFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=AN
 
 # 能力配置界面
 AreaWardrobeTab3 = Area(anchor=ANCHOR_TOP_CENTER)
-TextWardrobeAbilityTab = Text("能力配置", cap_area = AreaWardrobeTab3)
+# TextWardrobeAbilityTab = Text("能力配置", cap_area = AreaWardrobeTab3)
 IconAbilityFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=ANCHOR_TOP_CENTER)
 ButtonAbilityConfig = ImgIcon(print_log=LOG_ALL, threshold=0.99, anchor=ANCHOR_BOTTOM_RIGHT)
 ButtonAbilityChangeList = Button(print_log=LOG_WHEN_TRUE, threshold=0.75, gray_limit=(250, 255), anchor=ANCHOR_TOP_RIGHT)

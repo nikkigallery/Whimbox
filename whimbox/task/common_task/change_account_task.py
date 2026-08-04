@@ -23,10 +23,11 @@ class ChangeAccountTask(TaskTemplate):
         if not account.isascii():
             return ""
         allowed_chars = "abcdefghijklmnopqrstuvwxyz0123456789@."
-        return "".join(
+        account = "".join(
             char for char in account.lower()
             if char in allowed_chars
         )
+        return account.rsplit("@", 1)[0]
 
     def get_account_box_dict(self, cap=None, show_res=False, y_threshold=10):
         text_box_dict = itt.ocr_and_detect_posi(AreaLoginAccountList, cap=cap, show_res=show_res)
@@ -133,6 +134,8 @@ class ChangeAccountTask(TaskTemplate):
             while not self.need_stop():
                 account_box_dict = self.get_account_box_dict()
                 for key, box in account_box_dict.items():
+                    if key not in self.account_list:
+                        self.account_list.append(key)
                     if key not in self.finished_account_list:
                         AreaLoginAccountList.click(target_box=box)
                         time.sleep(0.5)

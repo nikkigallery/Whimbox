@@ -4,6 +4,7 @@ from whimbox.ui.page_assets import *
 from whimbox.ui.ui_assets import *
 from whimbox.interaction.interaction_core import itt
 from whimbox.common.logger import logger
+from whimbox.common.utils.ui_utils import *
 
 class EnterGameTask(TaskTemplate):
     def __init__(self, session_id):
@@ -30,6 +31,15 @@ class EnterGameTask(TaskTemplate):
             if not itt.get_img_existence(IconUILoading):
                 self.log_to_gui("游戏加载完成")
                 break
+        
+        # 先检查有没有跳出各种各样的确认弹窗，比如：网络波动等等
+        self.log_to_gui("检查是否出现异常弹窗")
+        if wait_until_appear_then_click(TextUnexceptedPopupConfirm):
+            self.log_to_gui("出现异常弹窗，自动点击“确认”")
+            if wait_until_appear(ButtonExitLogout):
+                self.log_to_gui("异常退出到登录界面，重新进入游戏", is_error=True)
+                return "step_enter_game"
+        
         # 不停点击，尝试点掉月卡界面，直到出现主界面
         self.log_to_gui("检测是否需要领取小月卡")
         times = 0
@@ -38,17 +48,20 @@ class EnterGameTask(TaskTemplate):
             # 有些电脑比较卡，会在小月卡出现前卡出主界面特征，所以需要多次验证
             if itt.get_img_existence(IconPageMainFeature):
                 times += 1
-                if times > 3:
+                if times > 2:
                     self.update_task_result(status=STATE_TYPE_SUCCESS, message="成功进入游戏")
                     break
             else:
-                itt.move_and_click((1920/2, 900)) # 不能点击屏幕中央，点到中央的月卡图标会无法跳过。
+                # 不能点击屏幕中央，点到中央的月卡图标会无法跳过。
+                itt.move_and_click((1920/2, 900))
+                # 月卡界面会覆盖在道具过期弹窗前，点月卡时，顺便把道具弹窗也点了
+                wait_until_appear_then_click(ButtonItemExpiredConfirm, retry_time=1) 
     
     def handle_finally(self):
         pass
     
 if __name__ == "__main__":
     task = EnterGameTask(session_id="debug")
-    # result = task.task_run()
-    # print(result)
-    task.step_loading_game()
+    result = task.task_run()
+    print(result)
+    # task.step_loading_game()
