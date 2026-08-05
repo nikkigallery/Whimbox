@@ -301,7 +301,11 @@ class ManualCalibrationViewportProvider:
 
 
 def _resolve_viewport_mode(value: str | None = None) -> ViewportMode:
-    raw = (value or os.environ.get("WHIMBOX_MAP_MASK_VIEWPORT_MODE") or "sample").strip().lower()
+    raw = (
+        value
+        or os.environ.get("WHIMBOX_MAP_MASK_VIEWPORT_MODE")
+        or "hybrid-auto-center"
+    ).strip().lower()
     raw = raw.replace("_", "-")
     if raw in {"manual", "manual-calibration", "calibration"}:
         return "manual-calibration"

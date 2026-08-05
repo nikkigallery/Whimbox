@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -18,6 +18,7 @@ from whimbox.map.mask.local_provider import LocalJsonProvider
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
 from whimbox.map.mask.resource_paths import package_map_mask_dir
 from whimbox.map.mask.service import MapMaskService
+from whimbox.map.mask.viewport_provider import ViewportResult, _resolve_viewport_mode
 
 
 POINT = {
@@ -153,6 +154,140 @@ class BigMapMatchGuardTests(unittest.TestCase):
             self.analysis(selected_to_top1_distance=1000.0)
         )
         self.assertEqual(status, "matching_ambiguous")
+
+
+class AutomaticViewportTrackingTests(unittest.TestCase):
+    def test_hybrid_auto_center_is_the_default_mode(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"WHIMBOX_MAP_MASK_VIEWPORT_MODE": ""},
+            clear=False,
+        ):
+            self.assertEqual(_resolve_viewport_mode(), "hybrid-auto-center")
+
+    def test_motion_state_reports_single_settled_transition(self) -> None:
+        manual_provider = Mock()
+        provider = HybridAutoCenterViewportProvider(manual_provider)
+        provider._motion_stable_frames = 2
+        still = np.zeros((180, 320), dtype=np.uint8)
+        moved = np.full((180, 320), 255, dtype=np.uint8)
+
+        initial = provider._update_motion_state(still)
+        moving = provider._update_motion_state(moved)
+        settling = provider._update_motion_state(moved)
+        settled = provider._update_motion_state(moved)
+        stable = provider._update_motion_state(moved)
+
+        self.assertEqual(initial, (None, False, False))
+        self.assertTrue(moving[1])
+        self.assertFalse(moving[2])
+        self.assertTrue(settling[1])
+        self.assertFalse(settling[2])
+        self.assertFalse(settled[1])
+        self.assertTrue(settled[2])
+        self.assertFalse(stable[1])
+        self.assertFalse(stable[2])
+
+    def test_dragged_map_center_moves_projected_point(self) -> None:
+        manual_provider = Mock()
+        manual_provider.get_viewport.return_value = ViewportResult(
+            viewport=None,
+            mode="manual-calibration",
+            source="manual-calibration",
+            calibration_error="calibration file not found",
+        )
+        provider = HybridAutoCenterViewportProvider(manual_provider)
+        provider._smoothing_mode = "jitter-only"
+        provider._capture_game = Mock(
+            return_value=np.zeros((1080, 1920, 4), dtype=np.uint8)
+        )
+        provider._update_motion_state = Mock(
+            side_effect=[
+                (0.0, False, False),
+                (0.0, False, False),
+                (20.0, True, False),
+                (0.0, False, True),
+            ]
+        )
+        provider._detect_tracking_first = Mock(
+            side_effect=[
+                {
+                    "center_x": 16000.0,
+                    "center_y": 14000.0,
+                    "confidence": 0.8,
+                    "local_confidence": None,
+                    "global_confidence": 0.8,
+                    "source": "global-top1",
+                    "matching_status": "matching_accepted",
+                    "matching_rejection_reason": "",
+                },
+                {
+                    "center_x": 16000.0,
+                    "center_y": 14000.0,
+                    "confidence": 0.8,
+                    "local_confidence": None,
+                    "global_confidence": 0.8,
+                    "source": "global-top1",
+                    "matching_status": "matching_accepted",
+                    "matching_rejection_reason": "",
+                },
+                {
+                    "center_x": 16100.0,
+                    "center_y": 14000.0,
+                    "confidence": 0.8,
+                    "local_confidence": 0.8,
+                    "global_confidence": None,
+                    "source": "local",
+                    "matching_status": "matching_accepted",
+                    "matching_rejection_reason": "",
+                },
+                {
+                    "center_x": 16100.0,
+                    "center_y": 14000.0,
+                    "confidence": 0.8,
+                    "local_confidence": 0.8,
+                    "global_confidence": None,
+                    "source": "local",
+                    "matching_status": "matching_accepted",
+                    "matching_rejection_reason": "",
+                },
+            ]
+        )
+        provider._cross_check_tracking = Mock(
+            side_effect=lambda _image, _map_name, match, **_kwargs: match
+        )
+
+        pending = provider.get_viewport(force_refresh=True)
+        first = provider.get_viewport(force_refresh=True)
+        during_drag = provider.get_viewport(force_refresh=True)
+        second = provider.get_viewport(force_refresh=True)
+        self.assertIsNone(pending.viewport)
+        self.assertIsNotNone(first.viewport)
+        self.assertIsNotNone(during_drag.viewport)
+        self.assertIsNotNone(second.viewport)
+        assert first.viewport is not None
+        assert during_drag.viewport is not None
+        assert second.viewport is not None
+        self.assertEqual(during_drag.viewport, first.viewport)
+        self.assertEqual(second.center_x, 16100.0)
+        self.assertEqual(second.center_y, 14000.0)
+        self.assertFalse(second.smoothing_applied)
+
+        point = MapMaskPoint.from_dict(
+            {
+                **POINT,
+                "image_x": 16100.0,
+                "image_y": 14000.0,
+            }
+        )
+        first_visible = point_to_visible(point, first.viewport)
+        second_visible = point_to_visible(point, second.viewport)
+        self.assertIsNotNone(first_visible)
+        self.assertIsNotNone(second_visible)
+        assert first_visible is not None
+        assert second_visible is not None
+        self.assertLess(second_visible.screen_x, first_visible.screen_x)
+        self.assertAlmostEqual(second_visible.screen_y, first_visible.screen_y)
 
 
 class VisiblePointsTests(unittest.TestCase):

@@ -70,7 +70,7 @@ class HybridAutoCenterViewportProvider:
         )
         self._reacquire_confirm_frames = _env_int(
             "WHIMBOX_MAP_MASK_VIEWPORT_REACQUIRE_CONFIRM_FRAMES",
-            default=4,
+            default=2,
             minimum=1,
         )
         self._reacquire_pending_radius = _env_float(
@@ -162,23 +162,27 @@ class HybridAutoCenterViewportProvider:
         force_refresh: bool = False,
     ) -> ViewportResult:
         base = self.manual_provider.get_viewport(map_name=map_name)
+        captured_image = None
         if base.viewport is None:
-            reason = base.calibration_error or "manual calibration unavailable"
-            return ViewportResult(
-                viewport=None,
-                mode="hybrid-auto-center",
-                source="manual-calibration-unavailable",
-                fallback_used=True,
-                fallback_reason=reason,
-                detection_error=reason,
-                calibration_path=base.calibration_path,
-                calibration_error=base.calibration_error,
-                screen_width=base.screen_width,
-                screen_height=base.screen_height,
-                **_span_result_fields(base),
-                smoothing_mode=self._smoothing_mode,
-                stale=True,
-            )
+            try:
+                captured_image = self._capture_game()
+                base = _automatic_base_viewport(
+                    captured_image,
+                    map_name=map_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                reason = f"automatic viewport base unavailable: {type(exc).__name__}: {exc}"
+                logger.warning(reason)
+                return ViewportResult(
+                    viewport=None,
+                    mode="hybrid-auto-center",
+                    source="capture-derived-base-unavailable",
+                    fallback_used=True,
+                    fallback_reason=reason,
+                    detection_error=reason,
+                    smoothing_mode=self._smoothing_mode,
+                    stale=True,
+                )
 
         base_signature = _viewport_result_signature(base)
         if (
@@ -197,8 +201,12 @@ class HybridAutoCenterViewportProvider:
             return self._with_current_age(self._cached_result, now)
 
         try:
-            image = self._capture_game()
-            motion_diff, motion_unstable = self._update_motion_state(image)
+            image = captured_image if captured_image is not None else self._capture_game()
+            (
+                motion_diff,
+                motion_unstable,
+                motion_just_settled,
+            ) = self._update_motion_state(image)
             match = self._detect_tracking_first(
                 image,
                 base.viewport.map_name,
@@ -263,6 +271,7 @@ class HybridAutoCenterViewportProvider:
                     local_confidence=local_confidence,
                     global_confidence=global_confidence,
                     selected_match_source=selected_match_source,
+                    suppress_manual_viewport=self._last_good_result is None,
                 )
 
             if bool(match.get("force_global_reset")):
@@ -286,6 +295,7 @@ class HybridAutoCenterViewportProvider:
                     now=now,
                     selected_match_source=selected_match_source,
                     motion_unstable=motion_unstable,
+                    motion_just_settled=motion_just_settled,
                 )
             if decision["accepted_center"] is None:
                 return self._pending_fallback(
@@ -382,6 +392,7 @@ class HybridAutoCenterViewportProvider:
                 local_confidence=None,
                 global_confidence=None,
                 selected_match_source="none",
+                suppress_manual_viewport=self._last_good_result is None,
             )
 
     def _capture_game(self):
@@ -706,14 +717,15 @@ class HybridAutoCenterViewportProvider:
             return np.where(tracking_mask, result, -1.0).astype(np.float32)
         return np.where(tracking_mask & (valid > 0), result, -1.0).astype(np.float32)
 
-    def _update_motion_state(self, image) -> tuple[float | None, bool]:
+    def _update_motion_state(self, image) -> tuple[float | None, bool, bool]:
         current = _motion_frame(image)
         if self._previous_motion_frame is None:
             self._previous_motion_frame = current
             self._motion_blocked = False
             self._motion_stable_count = self._motion_stable_frames
-            return None, False
+            return None, False, False
 
+        was_motion_blocked = self._motion_blocked
         motion_diff = float(
             np.mean(
                 cv2.absdiff(
@@ -735,7 +747,11 @@ class HybridAutoCenterViewportProvider:
                 self._motion_stable_frames,
                 self._motion_stable_count + 1,
             )
-        return motion_diff, self._motion_blocked
+        motion_just_settled = bool(
+            was_motion_blocked
+            and not self._motion_blocked
+        )
+        return motion_diff, self._motion_blocked, motion_just_settled
 
     def _fallback(
         self,
@@ -894,33 +910,14 @@ class HybridAutoCenterViewportProvider:
         now: float,
         selected_match_source: str,
         motion_unstable: bool,
+        motion_just_settled: bool,
     ) -> dict[str, object]:
         candidate_distance = (
             _distance(raw_center, self._last_good_center)
             if self._last_good_center is not None
             else None
         )
-        if (
-            self._last_good_center is not None
-            and candidate_distance is not None
-            and candidate_distance <= self._tracking_radius
-        ):
-            self._reset_pending()
-            smoothing = self._accept_center(raw_center, now=now)
-            reason = "tracking-local-match"
-            if selected_match_source != "local":
-                reason = "tracking-near-last-good;local-match-failed-global-used"
-            return {
-                "accepted_center": smoothing["accepted_center"],
-                "jump_distance": candidate_distance,
-                "candidate_distance": candidate_distance,
-                "accept_reason": reason,
-                "rejected_reason": "",
-                "tracking_mode": "tracking",
-                **smoothing,
-            }
-
-        tracking_mode = "reacquire"
+        tracking_mode = "tracking" if self._last_good_center is not None else "reacquire"
         jump_distance = candidate_distance
         if motion_unstable:
             self._reset_pending()
@@ -937,6 +934,34 @@ class HybridAutoCenterViewportProvider:
                     self._smoothed_center,
                 ),
                 "snap_reason": "",
+            }
+
+        if (
+            self._last_good_center is not None
+            and candidate_distance is not None
+            and candidate_distance <= self._tracking_radius
+        ):
+            self._reset_pending()
+            smoothing = self._accept_center(
+                raw_center,
+                now=now,
+                confirmed_jump=motion_just_settled,
+            )
+            reason = (
+                "tracking-motion-settled"
+                if motion_just_settled
+                else "tracking-local-match"
+            )
+            if selected_match_source != "local":
+                reason = "tracking-near-last-good;local-match-failed-global-used"
+            return {
+                "accepted_center": smoothing["accepted_center"],
+                "jump_distance": candidate_distance,
+                "candidate_distance": candidate_distance,
+                "accept_reason": reason,
+                "rejected_reason": "",
+                "tracking_mode": "tracking",
+                **smoothing,
             }
 
         pending_started = bool(
@@ -1082,14 +1107,7 @@ class HybridAutoCenterViewportProvider:
             self._last_good_result is not None
             and self._last_good_result.viewport is not None
         )
-        accepted_center = (
-            self._applied_center()
-            if has_last_good
-            else (
-                _viewport_center_x(base.viewport),
-                _viewport_center_y(base.viewport),
-            )
-        )
+        accepted_center = self._applied_center() if has_last_good else (None, None)
         if has_last_good:
             assert self._last_good_result is not None
             corrected_center = (
@@ -1126,7 +1144,9 @@ class HybridAutoCenterViewportProvider:
             "last_good_center_age_ms": self._last_good_age_ms(now),
             "smoothing_mode": self._smoothing_mode,
             "smoothing_applied": False,
-            "smoothing_distance": _distance(raw_center, accepted_center),
+            "smoothing_distance": (
+                _distance(raw_center, accepted_center) if has_last_good else None
+            ),
             "snap_reason": "",
             "tracking_mode": tracking_mode,
             "motion_diff": motion_diff,
@@ -1150,9 +1170,9 @@ class HybridAutoCenterViewportProvider:
             )
         else:
             result = ViewportResult(
-                viewport=base.viewport,
+                viewport=None,
                 mode="hybrid-auto-center",
-                source="manual-calibration-fallback",
+                source="reacquire-pending",
                 calibration_path=base.calibration_path,
                 calibration_error=base.calibration_error,
                 screen_width=base.screen_width,
@@ -1277,6 +1297,58 @@ class HybridAutoCenterViewportProvider:
                 analysis.selected_to_raw_top1_distance if analysis else None
             ),
         }
+
+
+def _automatic_base_viewport(
+    image,
+    *,
+    map_name: str | None,
+) -> ViewportResult:
+    resolved_map_name = map_name or "miraland"
+    map_scale = BIGMAP_POSITION_SCALE_DICT.get(resolved_map_name)
+    if map_scale is None or not math.isfinite(map_scale) or map_scale <= 0:
+        raise RuntimeError(
+            f"map scale unavailable for automatic viewport: {resolved_map_name!r}"
+        )
+
+    shape = getattr(image, "shape", ())
+    if len(shape) < 2:
+        raise RuntimeError(
+            f"capture has invalid shape for automatic viewport: {shape!r}"
+        )
+    screen_height = int(shape[0])
+    screen_width = int(shape[1])
+    if screen_width <= 0 or screen_height <= 0:
+        raise RuntimeError(
+            f"capture has invalid size: {screen_width}x{screen_height}"
+        )
+
+    image_width = screen_width * map_scale
+    image_height = screen_height * map_scale
+    viewport = MapMaskViewport(
+        map_name=resolved_map_name,
+        image_left=-image_width / 2,
+        image_top=-image_height / 2,
+        image_width=image_width,
+        image_height=image_height,
+        screen_left=0,
+        screen_top=0,
+        screen_width=screen_width,
+        screen_height=screen_height,
+        scale=1.0,
+        rotation=0.0,
+    )
+    return ViewportResult(
+        viewport=viewport,
+        mode="hybrid-auto-center",
+        source="capture-derived-base",
+        screen_width=screen_width,
+        screen_height=screen_height,
+        map_scale=map_scale,
+        map_scale_source="BIGMAP_POSITION_SCALE_DICT",
+        viewport_span_source="map-scale",
+        assumes_max_bigmap_zoom=True,
+    )
 
 
 def _viewport_from_center(
