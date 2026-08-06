@@ -161,11 +161,15 @@ class HybridAutoCenterViewportProvider:
         map_name: str | None = None,
         force_refresh: bool = False,
     ) -> ViewportResult:
+        request_started = time.perf_counter()
+        capture_ms = 0.0
         base = self.manual_provider.get_viewport(map_name=map_name)
         captured_image = None
         if base.viewport is None:
             try:
+                capture_started = time.perf_counter()
                 captured_image = self._capture_game()
+                capture_ms = (time.perf_counter() - capture_started) * 1000
                 base = _automatic_base_viewport(
                     captured_image,
                     map_name=map_name,
@@ -198,15 +202,29 @@ class HybridAutoCenterViewportProvider:
             and self._cached_base_signature == base_signature
             and (now - self._last_detection_monotonic) * 1000 < self._detection_interval_ms
         ):
+            logger.info(
+                "[map-mask-latency] phase=viewport-cache "
+                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
+                f"capture_ms={capture_ms:.2f} "
+                f"cache_age_ms={(now - self._last_detection_monotonic) * 1000:.2f}"
+            )
             return self._with_current_age(self._cached_result, now)
 
         try:
-            image = captured_image if captured_image is not None else self._capture_game()
+            if captured_image is None:
+                capture_started = time.perf_counter()
+                image = self._capture_game()
+                capture_ms += (time.perf_counter() - capture_started) * 1000
+            else:
+                image = captured_image
+            motion_started = time.perf_counter()
             (
                 motion_diff,
                 motion_unstable,
                 motion_just_settled,
             ) = self._update_motion_state(image)
+            motion_ms = (time.perf_counter() - motion_started) * 1000
+            match_started = time.perf_counter()
             match = self._detect_tracking_first(
                 image,
                 base.viewport.map_name,
@@ -217,6 +235,7 @@ class HybridAutoCenterViewportProvider:
                 match,
                 now=now,
             )
+            match_ms = (time.perf_counter() - match_started) * 1000
             raw_center_x = float(match["center_x"])
             raw_center_y = float(match["center_y"])
             confidence = float(match["confidence"])
@@ -251,29 +270,8 @@ class HybridAutoCenterViewportProvider:
                     selected_match_source=selected_match_source,
                     suppress_manual_viewport=True,
                 )
-            if confidence < self._confidence_threshold:
-                reason = (
-                    f"confidence {confidence:.3f} below threshold "
-                    f"{self._confidence_threshold:.3f}"
-                )
-                self._reset_pending()
-                return self._fallback(
-                    base=base,
-                    reason=reason,
-                    detection_error=reason,
-                    confidence=confidence,
-                    raw_center_x=raw_center_x,
-                    raw_center_y=raw_center_y,
-                    base_signature=base_signature,
-                    tracking_mode="tracking" if self._last_good_center else "reacquire",
-                    motion_diff=motion_diff,
-                    motion_unstable=motion_unstable,
-                    local_confidence=local_confidence,
-                    global_confidence=global_confidence,
-                    selected_match_source=selected_match_source,
-                    suppress_manual_viewport=self._last_good_result is None,
-                )
 
+            decision_started = time.perf_counter()
             if bool(match.get("force_global_reset")):
                 smoothing = self._accept_center(
                     (raw_center_x, raw_center_y),
@@ -297,6 +295,25 @@ class HybridAutoCenterViewportProvider:
                     motion_unstable=motion_unstable,
                     motion_just_settled=motion_just_settled,
                 )
+            decision_ms = (time.perf_counter() - decision_started) * 1000
+            accepted_center = decision["accepted_center"]
+            accepted_text = (
+                f"{accepted_center[0]:.2f},{accepted_center[1]:.2f}"
+                if isinstance(accepted_center, tuple)
+                else "pending"
+            )
+            logger.info(
+                "[map-mask-latency] phase=viewport-detect "
+                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
+                f"capture_ms={capture_ms:.2f} motion_ms={motion_ms:.2f} "
+                f"match_ms={match_ms:.2f} decision_ms={decision_ms:.2f} "
+                f"motion_diff={motion_diff if motion_diff is not None else 'n/a'} "
+                f"blocked={motion_unstable} stable_count={self._motion_stable_count}/"
+                f"{self._motion_stable_frames} just_settled={motion_just_settled} "
+                f"raw={raw_center_x:.2f},{raw_center_y:.2f} accepted={accepted_text} "
+                f"reason={decision['accept_reason'] or decision['rejected_reason']} "
+                f"smoothing={decision['smoothing_applied']}"
+            )
             if decision["accepted_center"] is None:
                 return self._pending_fallback(
                     base=base,
@@ -563,30 +580,34 @@ class HybridAutoCenterViewportProvider:
             )
         if not math.isfinite(analysis.selected_confidence):
             return "matching_failed", "selected center confidence is not finite"
-        if analysis.selected_confidence < self._confidence_threshold:
+        if not all(math.isfinite(value) for value in analysis.selected_center):
             return (
-                "matching_ambiguous",
+                "matching_failed",
+                "selected center contains a non-finite coordinate",
+            )
+
+        warnings = []
+        if analysis.selected_confidence < self._confidence_threshold:
+            warnings.append(
                 "selected-center confidence "
                 f"{analysis.selected_confidence:.3f} below threshold "
                 f"{self._confidence_threshold:.3f}; reported global top1 was "
-                f"{analysis.raw_top1_confidence:.3f}",
+                f"{analysis.raw_top1_confidence:.3f}"
             )
         margin = analysis.raw_top1_top2_margin
         if margin is None or margin < self._global_match_min_margin:
-            return (
-                "matching_ambiguous",
+            warnings.append(
                 f"top1/top2 margin {_format_optional(margin)} below "
-                f"{self._global_match_min_margin:.3f}",
+                f"{self._global_match_min_margin:.3f}"
             )
         selected_delta = analysis.selected_to_raw_top1_distance
         if (
             selected_delta is None
             or selected_delta > self._global_selected_top1_max_distance
         ):
-            return (
-                "matching_ambiguous",
+            warnings.append(
                 "selected local-maximum center differs from raw top1 by "
-                f"{_format_optional(selected_delta)} PNG px",
+                f"{_format_optional(selected_delta)} PNG px"
             )
         if self._expected_center is not None:
             expected_distance = _distance(
@@ -600,7 +621,10 @@ class HybridAutoCenterViewportProvider:
                 )
                 if self._reject_far_expected_center:
                     return "matching_ambiguous", warning
-                return "matching_accepted_but_far_from_known_point", warning
+                warnings.append(warning)
+
+        if warnings:
+            return "matching_provisional", "; ".join(warnings)
         return "matching_accepted", ""
 
     def _detect_center_local(

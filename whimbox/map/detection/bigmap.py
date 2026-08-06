@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from whimbox.common.utils.utils import *
 from whimbox.common.utils.img_utils import *
 from whimbox.common.utils.posi_utils import *
@@ -6,6 +7,85 @@ from whimbox.map.detection.cvars import *
 from whimbox.map.detection.map_assets import *
 from whimbox.map.detection.utils import *
 import typing as t
+
+
+@dataclass(slots=True)
+class BigMapPrediction:
+    """Side-effect-free result shared by navigation and map-mask matching."""
+
+    map_name: str
+    resize_scale: float
+    center_offset: np.ndarray
+    preprocessed: np.ndarray
+    result: np.ndarray
+    local_maximum: np.ndarray
+    selected_result_location: np.ndarray
+    position: np.ndarray
+    similarity: float
+    similarity_local: float
+
+
+def predict_bigmap(image, map_name: str) -> BigMapPrediction:
+    """Match one big-map screenshot without clicking UI or mutating global state."""
+    if map_name not in MAP_ASSETS_DICT:
+        raise RuntimeError(f"bigmap asset unavailable for {map_name!r}")
+    if map_name not in BIGMAP_POSITION_SCALE_DICT:
+        raise RuntimeError(f"bigmap scale unavailable for {map_name!r}")
+
+    resize_scale = BIGMAP_POSITION_SCALE_DICT[map_name] * BIGMAP_SEARCH_SCALE
+    luma = rgb2luma(image)
+    center_offset = (
+        np.asarray(image_size(luma), dtype=np.float64) / 2 * resize_scale
+    )
+    preprocessed = cv2.resize(
+        luma,
+        None,
+        fx=resize_scale,
+        fy=resize_scale,
+        interpolation=cv2.INTER_NEAREST,
+    )
+
+    asset = MAP_ASSETS_DICT[map_name]["luma_0125x"].img
+    result = cv2.matchTemplate(asset, preprocessed, cv2.TM_CCOEFF_NORMED)
+    _, similarity, _, _ = cv2.minMaxLoc(result)
+
+    local_maximum = cv2.subtract(result, cv2.GaussianBlur(result, (9, 9), 0))
+    mask_asset = MAP_ASSETS_DICT[map_name].get("mask_0125x")
+    if mask_asset is not None:
+        mask = image_center_crop(mask_asset.img, size=image_size(local_maximum))
+        local_maximum = cv2.copyTo(local_maximum, mask)
+    _, similarity_local, _, selected_location = cv2.minMaxLoc(local_maximum)
+
+    precise_area = area_offset((-4, -4, 4, 4), offset=selected_location)
+    precise = crop(
+        result,
+        AnchorPosi(
+            precise_area[0],
+            precise_area[1],
+            precise_area[2],
+            precise_area[3],
+        ),
+    )
+    _, precise_location = cubic_find_maximum(precise, precision=0.05)
+    precise_location -= 5
+    selected_result_location = (
+        np.asarray(selected_location, dtype=np.float64) + precise_location
+    )
+    position = (
+        selected_result_location + center_offset
+    ) / BIGMAP_SEARCH_SCALE
+    return BigMapPrediction(
+        map_name=map_name,
+        resize_scale=resize_scale,
+        center_offset=center_offset,
+        preprocessed=preprocessed,
+        result=result,
+        local_maximum=local_maximum,
+        selected_result_location=selected_result_location,
+        position=position,
+        similarity=float(similarity),
+        similarity_local=float(similarity_local),
+    )
 
 
 class BigMap:
@@ -26,36 +106,20 @@ class BigMap:
 
         Returns: (new)png position
         """
-        scale = BIGMAP_POSITION_SCALE_DICT[self.map_name] * BIGMAP_SEARCH_SCALE
-        image = rgb2luma(image)
-        center = np.array(image_size(image)) / 2 * scale
-        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
-
-        result = cv2.matchTemplate(MAP_ASSETS_DICT[self.map_name]["luma_0125x"].img, image, cv2.TM_CCOEFF_NORMED)
-        _, sim, _, loca = cv2.minMaxLoc(result)
-
-        # Gaussian filter to get local maximum
-        local_maximum = cv2.subtract(result, cv2.GaussianBlur(result, (9, 9), 0))
-        mask = image_center_crop(MAP_ASSETS_DICT[self.map_name]["mask_0125x"].img, size=image_size(local_maximum))
-        local_maximum = cv2.copyTo(local_maximum, mask)
-        _, local_sim, _, loca = cv2.minMaxLoc(local_maximum)
-
-        # Calculate the precise location using CUBIC
-        area = area_offset((-4, -4, 4, 4), offset=loca)
-        area = AnchorPosi(area[0], area[1], area[2], area[3])
-        precise = crop(result, area)
-        precise_sim, precise_loca = cubic_find_maximum(precise, precision=0.05)
-        precise_loca -= 5
-
-        global_loca = (loca + precise_loca + center) / BIGMAP_SEARCH_SCALE
-        self.bigmap_similarity = sim
-        self.bigmap_similarity_local = local_sim
-        self.bigmap_position = global_loca
+        prediction = predict_bigmap(image, self.map_name)
+        self.bigmap_similarity = prediction.similarity
+        self.bigmap_similarity_local = prediction.similarity_local
+        self.bigmap_position = prediction.position
 
         if CV_DEBUG_MODE:
-            cv2.imshow("image",image)
-            loca = loca + precise_loca + center
-            area = AnchorPosi(loca[0]-200, loca[1]-200, loca[0]+200, loca[1]+200)
+            cv2.imshow("image", prediction.preprocessed)
+            location = prediction.position * BIGMAP_SEARCH_SCALE
+            area = AnchorPosi(
+                location[0] - 200,
+                location[1] - 200,
+                location[0] + 200,
+                location[1] + 200,
+            )
             area = AnchorPosi(area.x1, area.y1, area.x2, area.y2)
             close_area = crop(MAP_ASSETS_DICT[self.map_name]["luma_0125x"].img, area)
             center = (close_area.shape[1] // 2, close_area.shape[0] // 2)
@@ -64,7 +128,7 @@ class BigMap:
             cv2.waitKey(1)
 
 
-        return sim, global_loca
+        return prediction.similarity, prediction.position
 
     def update_bigmap(self, image):
         """

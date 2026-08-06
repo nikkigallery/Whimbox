@@ -100,6 +100,7 @@ class MapMaskViewportProvider:
         self,
         map_name: str | None = None,
         mode: str | None = None,
+        force_refresh: bool = False,
     ) -> ViewportResult:
         viewport_mode = _resolve_viewport_mode(mode)
         if viewport_mode == "sample":
@@ -107,7 +108,10 @@ class MapMaskViewportProvider:
         if viewport_mode == "manual-calibration":
             return self._manual_with_fallback(map_name=map_name)
         if viewport_mode == "hybrid-auto-center":
-            return self._hybrid_with_fallback(map_name=map_name)
+            return self._hybrid_with_fallback(
+                map_name=map_name,
+                force_refresh=force_refresh,
+            )
         return self._auto_placeholder_with_fallback(map_name=map_name)
 
     def get_mode(self, mode: str | None = None) -> ViewportMode:
@@ -142,12 +146,19 @@ class MapMaskViewportProvider:
         fallback.calibration_error = "auto viewport calibration is not implemented yet"
         return fallback
 
-    def _hybrid_with_fallback(self, map_name: str | None = None) -> ViewportResult:
+    def _hybrid_with_fallback(
+        self,
+        map_name: str | None = None,
+        force_refresh: bool = False,
+    ) -> ViewportResult:
         if self.hybrid_provider is None:
             from .auto_viewport_provider import HybridAutoCenterViewportProvider
 
             self.hybrid_provider = HybridAutoCenterViewportProvider(self.manual_provider)
-        hybrid = self.hybrid_provider.get_viewport(map_name=map_name)
+        hybrid = self.hybrid_provider.get_viewport(
+            map_name=map_name,
+            force_refresh=force_refresh,
+        )
         if hybrid.viewport is not None:
             return hybrid
         if hybrid.source == "matching-rejected":

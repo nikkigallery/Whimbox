@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import threading
+import time
 from typing import Any
 
 from whimbox.common.logger import logger
@@ -15,6 +17,10 @@ from .provider import MapMaskProvider
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 
+_DETECTION_WORKER_INTERVAL_SECONDS = 0.05
+_DETECTION_WORKER_IDLE_SECONDS = 2.0
+
+
 class MapMaskService:
     def __init__(self) -> None:
         self.local_provider = LocalJsonProvider()
@@ -26,6 +32,153 @@ class MapMaskService:
         self.enabled = global_config.get_bool("MapMask", "enabled", True)
         self.use_sample_viewport = global_config.get_bool("MapMask", "use_sample_viewport", True)
         self._selected_label_ids: list[str] | None = None
+        self._detection_lock = threading.Lock()
+        self._detection_provider_lock = threading.Lock()
+        self._detection_wake = threading.Event()
+        self._detection_thread: threading.Thread | None = None
+        self._detection_last_activity = 0.0
+        self._detection_map_name: str | None = None
+        self._detection_snapshot: tuple[BigMapDetectionState, ViewportResult] | None = None
+
+    def _touch_detection_worker(self, map_name: str | None) -> None:
+        with self._detection_lock:
+            if not self.enabled:
+                return
+            map_changed = map_name != self._detection_map_name
+            self._detection_last_activity = time.monotonic()
+            self._detection_map_name = map_name
+            worker_running = bool(
+                self._detection_thread is not None
+                and self._detection_thread.is_alive()
+            )
+            if not worker_running:
+                self._detection_snapshot = None
+                self._detection_wake.clear()
+            self._ensure_detection_thread_locked()
+            if worker_running and map_changed:
+                self._detection_wake.set()
+
+    def _ensure_detection_thread_locked(self) -> None:
+        if self._detection_thread is not None and self._detection_thread.is_alive():
+            return
+        thread = threading.Thread(
+            target=self._detection_loop,
+            name="map-mask-detection",
+            daemon=True,
+        )
+        self._detection_thread = thread
+        thread.start()
+
+    def _detection_loop(self) -> None:
+        current_thread = threading.current_thread()
+        logger.info("[map-mask-worker] started")
+        stop_reason = "inactive"
+        try:
+            while True:
+                with self._detection_lock:
+                    inactive_for = time.monotonic() - self._detection_last_activity
+                    if not self.enabled:
+                        stop_reason = "disabled"
+                        if self._detection_thread is current_thread:
+                            self._detection_thread = None
+                            self._detection_snapshot = None
+                        break
+                    if inactive_for >= _DETECTION_WORKER_IDLE_SECONDS:
+                        stop_reason = "request-idle-timeout"
+                        if self._detection_thread is current_thread:
+                            # Release ownership before leaving the loop so a request
+                            # arriving at the timeout boundary can start a new worker.
+                            self._detection_thread = None
+                            self._detection_snapshot = None
+                        break
+                    map_name = self._detection_map_name
+
+                cycle_started = time.perf_counter()
+                try:
+                    with self._detection_provider_lock:
+                        bigmap_state = self.bigmap_state_provider.detect()
+                        viewport_result = self._detect_viewport_result(
+                            map_name=map_name,
+                            is_bigmap_open=bigmap_state.is_bigmap_open,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception(f"[map-mask-worker] detection cycle failed: {exc}")
+                else:
+                    with self._detection_lock:
+                        if self.enabled and self._detection_thread is current_thread:
+                            self._detection_snapshot = (bigmap_state, viewport_result)
+                    logger.info(
+                        "[map-mask-worker] cycle "
+                        f"duration_ms={(time.perf_counter() - cycle_started) * 1000:.2f} "
+                        f"open={bigmap_state.is_bigmap_open} "
+                        f"center={viewport_result.center_x},{viewport_result.center_y} "
+                        f"reason={viewport_result.center_accept_reason or viewport_result.center_rejected_reason}"
+                    )
+
+                elapsed = time.perf_counter() - cycle_started
+                wait_seconds = max(0.0, _DETECTION_WORKER_INTERVAL_SECONDS - elapsed)
+                self._detection_wake.wait(wait_seconds)
+                self._detection_wake.clear()
+        finally:
+            with self._detection_lock:
+                if self._detection_thread is current_thread:
+                    self._detection_thread = None
+                    self._detection_snapshot = None
+            logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
+
+    def _detect_viewport_result(
+        self,
+        *,
+        map_name: str | None,
+        is_bigmap_open: bool,
+    ) -> ViewportResult:
+        if not is_bigmap_open:
+            return ViewportResult(
+                viewport=None,
+                mode=self.viewport_provider.get_mode(),
+                source="bigmap-closed",
+                fallback_reason="big map is closed",
+            )
+        if not self.use_sample_viewport:
+            return ViewportResult(
+                viewport=None,
+                mode="sample",
+                source="none",
+                calibration_error="sample viewport disabled",
+            )
+        return self.viewport_provider.get_viewport(
+            map_name=map_name,
+            force_refresh=True,
+        )
+
+    def _get_detection_snapshot(
+        self,
+    ) -> tuple[BigMapDetectionState, ViewportResult] | None:
+        with self._detection_lock:
+            if not self.enabled:
+                return None
+            return self._detection_snapshot
+
+    def _pending_detection_state(self) -> BigMapDetectionState:
+        mode = self.bigmap_state_provider.get_mode()
+        return BigMapDetectionState(
+            is_bigmap_open=False,
+            raw_is_bigmap_open=False,
+            stable_is_bigmap_open=False,
+            consecutive_open_count=0,
+            consecutive_closed_count=0,
+            detection_mode=mode,
+            detection_source="worker.pending",
+            detection_confidence=0.0,
+            detection_error="",
+            last_detection_time="",
+            last_successful_detection_time="",
+            detection_duration_ms=0.0,
+            detection_interval_ms=int(_DETECTION_WORKER_INTERVAL_SECONDS * 1000),
+            stable_open_frames=2,
+            stable_closed_frames=2,
+            message="map-mask detection worker is pending or inactive",
+        )
 
     def get_state(
         self,
@@ -37,10 +190,18 @@ class MapMaskService:
 
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
         self.enabled = bool(enabled)
+        if not self.enabled:
+            with self._detection_lock:
+                self._detection_snapshot = None
+                self._detection_wake.set()
         return self.get_state()
 
     def set_bigmap_detection_mode(self, mode: str) -> dict[str, Any]:
-        self.bigmap_state_provider.set_mode(mode)
+        with self._detection_provider_lock:
+            self.bigmap_state_provider.set_mode(mode)
+        with self._detection_lock:
+            self._detection_snapshot = None
+            self._detection_wake.set()
         return self.get_state()
 
     def get_labels(self) -> list[dict[str, Any]]:
@@ -69,11 +230,21 @@ class MapMaskService:
         map_name: str | None = None,
         label_ids: list[str] | None = None,
     ) -> dict[str, Any]:
+        request_started = time.perf_counter()
+        self._touch_detection_worker(map_name)
         state, active_viewport, _ = self._build_state(viewport=viewport, map_name=map_name)
+        state_ms = (time.perf_counter() - request_started) * 1000
         state_dict = state.to_dict()
         if not self.enabled or not state.is_bigmap_open or active_viewport is None:
+            logger.info(
+                "[map-mask-latency] phase=visible-points "
+                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
+                f"state_ms={state_ms:.2f} projection_ms=0.00 points=0 "
+                f"open={state.is_bigmap_open} viewport={active_viewport is not None}"
+            )
             return {"state": state_dict, "viewport": {}, "points": []}
 
+        projection_started = time.perf_counter()
         selected_label_ids = label_ids if label_ids is not None else self.get_selected_label_ids()
         points = self._list_points(label_ids=selected_label_ids, map_name=active_viewport.map_name)
         visible_points = []
@@ -82,6 +253,14 @@ class MapMaskService:
             if visible is not None:
                 visible_points.append(visible.to_dict())
 
+        projection_ms = (time.perf_counter() - projection_started) * 1000
+        logger.info(
+            "[map-mask-latency] phase=visible-points "
+            f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
+            f"state_ms={state_ms:.2f} projection_ms={projection_ms:.2f} "
+            f"points={len(visible_points)} center={state.viewport_center_x},"
+            f"{state.viewport_center_y} reason={state.center_accept_reason}"
+        )
         return {
             "state": state_dict,
             "viewport": active_viewport.to_dict(),
@@ -102,12 +281,30 @@ class MapMaskService:
         map_name: str | None = None,
     ) -> tuple[MapMaskState, MapMaskViewport | None, BigMapDetectionState]:
         selected_label_ids = self.get_selected_label_ids()
-        bigmap_state = self.bigmap_state_provider.detect()
-        viewport_result = self._get_viewport_result(
-            viewport=viewport,
-            map_name=map_name,
-            is_bigmap_open=bigmap_state.is_bigmap_open,
+        uses_detection_worker = bool(
+            viewport is None
+            and self.viewport_provider.get_mode() == "hybrid-auto-center"
         )
+        if uses_detection_worker:
+            snapshot = self._get_detection_snapshot()
+            if snapshot is None:
+                bigmap_state = self._pending_detection_state()
+                viewport_result = ViewportResult(
+                    viewport=None,
+                    mode="hybrid-auto-center",
+                    source="detection-worker-pending",
+                    fallback_reason="detection worker has no snapshot yet",
+                    stale=True,
+                )
+            else:
+                bigmap_state, viewport_result = snapshot
+        else:
+            bigmap_state = self.bigmap_state_provider.detect()
+            viewport_result = self._get_viewport_result(
+                viewport=viewport,
+                map_name=map_name,
+                is_bigmap_open=bigmap_state.is_bigmap_open,
+            )
         data_status = self._get_data_status()
         raw_viewport = viewport_result.viewport
         viewport_source = self._get_viewport_source(viewport_result, bigmap_state.is_bigmap_open)

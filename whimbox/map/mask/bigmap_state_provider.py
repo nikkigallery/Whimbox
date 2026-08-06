@@ -40,7 +40,7 @@ class BigMapStateProvider:
         self._manual_mode: BigMapDetectionMode = _initial_detection_mode()
         self._detection_interval_ms = _env_int(
             "WHIMBOX_MAP_MASK_DETECTION_INTERVAL_MS",
-            default=500,
+            default=100,
             minimum=100,
         )
         stable_frames = _env_int(

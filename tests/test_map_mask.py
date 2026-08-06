@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -137,23 +138,23 @@ class BigMapMatchGuardTests(unittest.TestCase):
             asset=empty,
         )
 
-    def test_rejects_when_reported_confidence_does_not_belong_to_center(self) -> None:
+    def test_marks_low_selected_confidence_provisional(self) -> None:
         status, _ = self.provider._classify_global_match(
             self.analysis(selected_confidence=0.2)
         )
-        self.assertEqual(status, "matching_ambiguous")
+        self.assertEqual(status, "matching_provisional")
 
-    def test_rejects_small_top1_top2_margin(self) -> None:
+    def test_marks_small_top1_top2_margin_provisional(self) -> None:
         status, _ = self.provider._classify_global_match(
             self.analysis(margin=0.01)
         )
-        self.assertEqual(status, "matching_ambiguous")
+        self.assertEqual(status, "matching_provisional")
 
-    def test_rejects_selected_center_far_from_raw_top1(self) -> None:
+    def test_marks_selected_center_far_from_raw_top1_provisional(self) -> None:
         status, _ = self.provider._classify_global_match(
             self.analysis(selected_to_top1_distance=1000.0)
         )
-        self.assertEqual(status, "matching_ambiguous")
+        self.assertEqual(status, "matching_provisional")
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
@@ -214,22 +215,22 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
                 {
                     "center_x": 16000.0,
                     "center_y": 14000.0,
-                    "confidence": 0.8,
+                    "confidence": 0.32,
                     "local_confidence": None,
-                    "global_confidence": 0.8,
+                    "global_confidence": 0.32,
                     "source": "global-top1",
-                    "matching_status": "matching_accepted",
-                    "matching_rejection_reason": "",
+                    "matching_status": "matching_provisional",
+                    "matching_rejection_reason": "weak global match",
                 },
                 {
                     "center_x": 16000.0,
                     "center_y": 14000.0,
-                    "confidence": 0.8,
+                    "confidence": 0.32,
                     "local_confidence": None,
-                    "global_confidence": 0.8,
+                    "global_confidence": 0.32,
                     "source": "global-top1",
-                    "matching_status": "matching_accepted",
-                    "matching_rejection_reason": "",
+                    "matching_status": "matching_provisional",
+                    "matching_rejection_reason": "weak global match",
                 },
                 {
                     "center_x": 16100.0,
@@ -288,6 +289,72 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         assert second_visible is not None
         self.assertLess(second_visible.screen_x, first_visible.screen_x)
         self.assertAlmostEqual(second_visible.screen_y, first_visible.screen_y)
+
+
+class DetectionWorkerLifecycleTests(unittest.TestCase):
+    def test_visible_points_request_starts_worker_and_disable_stops_it(self) -> None:
+        service = MapMaskService()
+        service.enabled = True
+        service.bigmap_state_provider.set_mode("force-open")
+        service.viewport_provider.get_mode = Mock(return_value="hybrid-auto-center")
+        service.viewport_provider.get_viewport = Mock(
+            return_value=ViewportResult(
+                viewport=viewport(),
+                mode="hybrid-auto-center",
+                source="test-worker",
+                center_x=1500.0,
+                center_y=2500.0,
+            )
+        )
+
+        self.assertIsNone(service._detection_thread)
+        self.assertIsNone(service._get_detection_snapshot())
+
+        service.get_visible_points()
+        deadline = time.monotonic() + 1.0
+        while service._get_detection_snapshot() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        snapshot = service._get_detection_snapshot()
+        self.assertIsNotNone(snapshot)
+        worker = service._detection_thread
+        self.assertIsNotNone(worker)
+        assert worker is not None
+        self.assertTrue(worker.is_alive())
+
+        service.set_enabled(False)
+        worker.join(timeout=1.0)
+        self.assertFalse(worker.is_alive())
+        self.assertIsNone(service._get_detection_snapshot())
+
+    def test_worker_exits_after_request_timeout_and_restarts_on_next_request(self) -> None:
+        service = MapMaskService()
+        service.enabled = True
+        service.bigmap_state_provider.set_mode("force-closed")
+
+        with patch(
+            "whimbox.map.mask.service._DETECTION_WORKER_IDLE_SECONDS",
+            0.05,
+        ):
+            service.get_visible_points()
+            worker = service._detection_thread
+            self.assertIsNotNone(worker)
+            assert worker is not None
+            worker.join(timeout=1.0)
+            self.assertFalse(worker.is_alive())
+            self.assertIsNone(service._detection_thread)
+            self.assertIsNone(service._get_detection_snapshot())
+
+            service.get_visible_points()
+            restarted_worker = service._detection_thread
+            self.assertIsNotNone(restarted_worker)
+            assert restarted_worker is not None
+            self.assertIsNot(restarted_worker, worker)
+            self.assertTrue(restarted_worker.is_alive())
+
+            service.set_enabled(False)
+            restarted_worker.join(timeout=1.0)
+            self.assertFalse(restarted_worker.is_alive())
 
 
 class VisiblePointsTests(unittest.TestCase):

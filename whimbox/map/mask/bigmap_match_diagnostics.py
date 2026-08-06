@@ -7,15 +7,9 @@ from typing import Any
 import cv2
 import numpy as np
 
-from whimbox.common.utils.asset_utils import AnchorPosi
-from whimbox.common.utils.img_utils import crop, image_size, rgb2luma
-from whimbox.common.utils.posi_utils import area_offset
-from whimbox.map.detection.cvars import (
-    BIGMAP_POSITION_SCALE_DICT,
-    BIGMAP_SEARCH_SCALE,
-)
+from whimbox.map.detection.bigmap import predict_bigmap
+from whimbox.map.detection.cvars import BIGMAP_SEARCH_SCALE
 from whimbox.map.detection.map_assets import MAP_ASSETS_DICT
-from whimbox.map.detection.utils import cubic_find_maximum, image_center_crop
 
 
 @dataclass(slots=True)
@@ -79,53 +73,20 @@ def analyze_bigmap_match(
     top_k: int = 5,
     nms_radius_png: float = 300.0,
 ) -> BigMapMatchAnalysis:
-    if map_name not in MAP_ASSETS_DICT:
-        raise RuntimeError(f"bigmap asset unavailable for {map_name!r}")
-    if map_name not in BIGMAP_POSITION_SCALE_DICT:
-        raise RuntimeError(f"bigmap scale unavailable for {map_name!r}")
-
-    resize_scale = BIGMAP_POSITION_SCALE_DICT[map_name] * BIGMAP_SEARCH_SCALE
     source = np.asarray(image)
-    luma = rgb2luma(source)
-    center_offset = np.asarray(image_size(luma), dtype=np.float64) / 2 * resize_scale
-    preprocessed = cv2.resize(
-        luma,
-        None,
-        fx=resize_scale,
-        fy=resize_scale,
-        interpolation=cv2.INTER_NEAREST,
-    )
+    prediction = predict_bigmap(source, map_name)
+    resize_scale = prediction.resize_scale
+    center_offset = prediction.center_offset
+    preprocessed = prediction.preprocessed
 
     asset_entry = MAP_ASSETS_DICT[map_name]["luma_0125x"]
     asset = asset_entry.img
-    result = cv2.matchTemplate(asset, preprocessed, cv2.TM_CCOEFF_NORMED)
-    _, raw_top1_confidence, _, _ = cv2.minMaxLoc(result)
-
-    local_maximum = cv2.subtract(result, cv2.GaussianBlur(result, (9, 9), 0))
-    mask_asset = MAP_ASSETS_DICT[map_name].get("mask_0125x")
-    if mask_asset is not None:
-        mask = image_center_crop(mask_asset.img, size=image_size(local_maximum))
-        local_maximum = cv2.copyTo(local_maximum, mask)
-    _, selected_local_score, _, selected_location = cv2.minMaxLoc(local_maximum)
-
-    precise_area = area_offset((-4, -4, 4, 4), offset=selected_location)
-    precise = crop(
-        result,
-        AnchorPosi(
-            precise_area[0],
-            precise_area[1],
-            precise_area[2],
-            precise_area[3],
-        ),
-    )
-    _, precise_location = cubic_find_maximum(precise, precision=0.05)
-    precise_location -= 5
-    selected_result_location = (
-        np.asarray(selected_location, dtype=np.float64) + precise_location
-    )
-    selected_center_array = (
-        selected_result_location + center_offset
-    ) / BIGMAP_SEARCH_SCALE
+    result = prediction.result
+    local_maximum = prediction.local_maximum
+    raw_top1_confidence = prediction.similarity
+    selected_local_score = prediction.similarity_local
+    selected_result_location = prediction.selected_result_location
+    selected_center_array = prediction.position
     selected_center = (
         float(selected_center_array[0]),
         float(selected_center_array[1]),
