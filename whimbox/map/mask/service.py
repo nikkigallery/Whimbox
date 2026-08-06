@@ -107,13 +107,6 @@ class MapMaskService:
                     with self._detection_lock:
                         if self.enabled and self._detection_thread is current_thread:
                             self._detection_snapshot = (bigmap_state, viewport_result)
-                    logger.info(
-                        "[map-mask-worker] cycle "
-                        f"duration_ms={(time.perf_counter() - cycle_started) * 1000:.2f} "
-                        f"open={bigmap_state.is_bigmap_open} "
-                        f"center={viewport_result.center_x},{viewport_result.center_y} "
-                        f"reason={viewport_result.center_accept_reason or viewport_result.center_rejected_reason}"
-                    )
 
                 elapsed = time.perf_counter() - cycle_started
                 wait_seconds = max(0.0, _DETECTION_WORKER_INTERVAL_SECONDS - elapsed)
@@ -230,21 +223,12 @@ class MapMaskService:
         map_name: str | None = None,
         label_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        request_started = time.perf_counter()
         self._touch_detection_worker(map_name)
         state, active_viewport, _ = self._build_state(viewport=viewport, map_name=map_name)
-        state_ms = (time.perf_counter() - request_started) * 1000
         state_dict = state.to_dict()
         if not self.enabled or not state.is_bigmap_open or active_viewport is None:
-            logger.info(
-                "[map-mask-latency] phase=visible-points "
-                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
-                f"state_ms={state_ms:.2f} projection_ms=0.00 points=0 "
-                f"open={state.is_bigmap_open} viewport={active_viewport is not None}"
-            )
             return {"state": state_dict, "viewport": {}, "points": []}
 
-        projection_started = time.perf_counter()
         selected_label_ids = label_ids if label_ids is not None else self.get_selected_label_ids()
         points = self._list_points(label_ids=selected_label_ids, map_name=active_viewport.map_name)
         visible_points = []
@@ -253,14 +237,6 @@ class MapMaskService:
             if visible is not None:
                 visible_points.append(visible.to_dict())
 
-        projection_ms = (time.perf_counter() - projection_started) * 1000
-        logger.info(
-            "[map-mask-latency] phase=visible-points "
-            f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
-            f"state_ms={state_ms:.2f} projection_ms={projection_ms:.2f} "
-            f"points={len(visible_points)} center={state.viewport_center_x},"
-            f"{state.viewport_center_y} reason={state.center_accept_reason}"
-        )
         return {
             "state": state_dict,
             "viewport": active_viewport.to_dict(),

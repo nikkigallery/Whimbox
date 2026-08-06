@@ -161,15 +161,11 @@ class HybridAutoCenterViewportProvider:
         map_name: str | None = None,
         force_refresh: bool = False,
     ) -> ViewportResult:
-        request_started = time.perf_counter()
-        capture_ms = 0.0
         base = self.manual_provider.get_viewport(map_name=map_name)
         captured_image = None
         if base.viewport is None:
             try:
-                capture_started = time.perf_counter()
                 captured_image = self._capture_game()
-                capture_ms = (time.perf_counter() - capture_started) * 1000
                 base = _automatic_base_viewport(
                     captured_image,
                     map_name=map_name,
@@ -202,29 +198,18 @@ class HybridAutoCenterViewportProvider:
             and self._cached_base_signature == base_signature
             and (now - self._last_detection_monotonic) * 1000 < self._detection_interval_ms
         ):
-            logger.info(
-                "[map-mask-latency] phase=viewport-cache "
-                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
-                f"capture_ms={capture_ms:.2f} "
-                f"cache_age_ms={(now - self._last_detection_monotonic) * 1000:.2f}"
-            )
             return self._with_current_age(self._cached_result, now)
 
         try:
             if captured_image is None:
-                capture_started = time.perf_counter()
                 image = self._capture_game()
-                capture_ms += (time.perf_counter() - capture_started) * 1000
             else:
                 image = captured_image
-            motion_started = time.perf_counter()
             (
                 motion_diff,
                 motion_unstable,
                 motion_just_settled,
             ) = self._update_motion_state(image)
-            motion_ms = (time.perf_counter() - motion_started) * 1000
-            match_started = time.perf_counter()
             match = self._detect_tracking_first(
                 image,
                 base.viewport.map_name,
@@ -235,7 +220,6 @@ class HybridAutoCenterViewportProvider:
                 match,
                 now=now,
             )
-            match_ms = (time.perf_counter() - match_started) * 1000
             raw_center_x = float(match["center_x"])
             raw_center_y = float(match["center_y"])
             confidence = float(match["confidence"])
@@ -271,7 +255,6 @@ class HybridAutoCenterViewportProvider:
                     suppress_manual_viewport=True,
                 )
 
-            decision_started = time.perf_counter()
             if bool(match.get("force_global_reset")):
                 smoothing = self._accept_center(
                     (raw_center_x, raw_center_y),
@@ -295,25 +278,6 @@ class HybridAutoCenterViewportProvider:
                     motion_unstable=motion_unstable,
                     motion_just_settled=motion_just_settled,
                 )
-            decision_ms = (time.perf_counter() - decision_started) * 1000
-            accepted_center = decision["accepted_center"]
-            accepted_text = (
-                f"{accepted_center[0]:.2f},{accepted_center[1]:.2f}"
-                if isinstance(accepted_center, tuple)
-                else "pending"
-            )
-            logger.info(
-                "[map-mask-latency] phase=viewport-detect "
-                f"total_ms={(time.perf_counter() - request_started) * 1000:.2f} "
-                f"capture_ms={capture_ms:.2f} motion_ms={motion_ms:.2f} "
-                f"match_ms={match_ms:.2f} decision_ms={decision_ms:.2f} "
-                f"motion_diff={motion_diff if motion_diff is not None else 'n/a'} "
-                f"blocked={motion_unstable} stable_count={self._motion_stable_count}/"
-                f"{self._motion_stable_frames} just_settled={motion_just_settled} "
-                f"raw={raw_center_x:.2f},{raw_center_y:.2f} accepted={accepted_text} "
-                f"reason={decision['accept_reason'] or decision['rejected_reason']} "
-                f"smoothing={decision['smoothing_applied']}"
-            )
             if decision["accepted_center"] is None:
                 return self._pending_fallback(
                     base=base,
