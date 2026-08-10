@@ -17,6 +17,7 @@ from whimbox.map.mask.bigmap_match_diagnostics import BigMapMatchAnalysis
 from whimbox.map.mask.coordinate import point_to_visible
 from whimbox.map.mask.local_provider import LocalJsonProvider
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
+from whimbox.map.mask.pearpal_provider import OfficialPearPalProvider
 from whimbox.map.mask.resource_paths import package_map_mask_dir
 from whimbox.map.mask.service import MapMaskService
 from whimbox.map.mask.viewport_provider import ViewportResult, _resolve_viewport_mode
@@ -77,6 +78,143 @@ class LocalJsonProviderTests(unittest.TestCase):
         self.assertTrue((resource_dir / "labels.sample.json").is_file())
         self.assertTrue((resource_dir / "points.sample.json").is_file())
         self.assertTrue((resource_dir / "viewport_samples.sample.json").is_file())
+
+
+class FakePearPalClient:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+
+    def fetch_catalog(self, world_id: str):
+        if self.fail:
+            raise RuntimeError("public API unavailable")
+        return {
+            "data": {
+                "list": [
+                    {
+                        "id": 2,
+                        "name": "收集物",
+                        "catalogs": [
+                            {"id": 11, "name": "奇想星", "icon": "star.png"},
+                            {"id": 999, "name": "阶段入口"},
+                        ],
+                    },
+                    {
+                        "id": 14,
+                        "name": "宝箱",
+                        "catalogs": [
+                            {"id": 13, "name": "普通宝箱", "icon": "box.png"},
+                        ],
+                    },
+                ]
+            }
+        }, None
+
+    def fetch_spawners(self, world_id: str):
+        return [
+            {"id": 100, "world_id": 1, "catalog": 11, "x": 100, "y": 200},
+            {
+                "id": 200,
+                "world_id": 1,
+                "catalog": 999,
+                "x": 300,
+                "y": 400,
+                "stage_id": "stage-1",
+            },
+            {"id": 300, "world_id": 1, "catalog": 999, "x": 500, "y": 600},
+        ], None
+
+    def fetch_stage_spawners(self):
+        return {
+            "stage-1": [
+                {"id": 201, "catalog": 13, "description": "阶段宝箱"},
+            ]
+        }, None
+
+
+class OfficialPearPalProviderTests(unittest.TestCase):
+    def test_loads_star_box_and_expands_stage_child(self) -> None:
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+        )
+
+        labels = provider.list_labels()
+        points = provider.list_points()
+        point_by_id = {point.id: point for point in points}
+
+        self.assertEqual([label.id for label in labels], ["pearpal_star", "pearpal_box"])
+        self.assertEqual(set(point_by_id), {"pearpal:100", "pearpal:201"})
+        self.assertEqual(point_by_id["pearpal:100"].label_id, "pearpal_star")
+        self.assertAlmostEqual(
+            point_by_id["pearpal:100"].image_x,
+            2.2222222222222223,
+        )
+        self.assertAlmostEqual(
+            point_by_id["pearpal:100"].image_y,
+            4.444444444444445,
+        )
+        stage_box = point_by_id["pearpal:201"]
+        self.assertEqual(stage_box.label_id, "pearpal_box")
+        self.assertAlmostEqual(stage_box.image_x, 6.666666666666667)
+        self.assertAlmostEqual(stage_box.image_y, 8.88888888888889)
+        self.assertEqual(stage_box.detail["parent_stage_id"], "stage-1")
+        self.assertTrue(stage_box.detail["is_stage_expanded"])
+        self.assertEqual(provider.get_data_status()["points_source"], "pearpal-public-ready")
+
+    def test_current_api_anchor_maps_near_checkpoint_png_position(self) -> None:
+        client = FakePearPalClient()
+        client.fetch_spawners = Mock(
+            return_value=(
+                [
+                    {
+                        "id": 1399,
+                        "world_id": 1,
+                        "catalog": 11,
+                        "x": 923326.871094,
+                        "y": 895070.148438,
+                    }
+                ],
+                None,
+            )
+        )
+        client.fetch_stage_spawners = Mock(return_value=({}, None))
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=client,
+            background=False,
+        )
+
+        point = provider.list_points()[0]
+
+        self.assertEqual(point.id, "pearpal:1399")
+        self.assertAlmostEqual(point.image_x, 20526.281163, delta=15.0)
+        self.assertAlmostEqual(point.image_y, 19892.919618, delta=15.0)
+
+    def test_filters_by_label_and_map(self) -> None:
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+        )
+
+        stars = provider.list_points(label_ids=["pearpal_star"], map_name="miraland")
+
+        self.assertEqual([point.id for point in stars], ["pearpal:100"])
+        self.assertEqual(provider.list_points(map_name="unsupported"), [])
+        self.assertEqual(provider.list_points(label_ids=[]), [])
+
+    def test_public_api_error_is_reported_without_sample_fallback(self) -> None:
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(fail=True),
+            background=False,
+        )
+
+        self.assertEqual(provider.list_points(), [])
+        status = provider.get_data_status()
+        self.assertEqual(status["points_source"], "pearpal-public-error")
+        self.assertIn("public API unavailable", status["points_error"])
 
 
 class CoordinateProjectionTests(unittest.TestCase):
@@ -294,6 +432,8 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
 class DetectionWorkerLifecycleTests(unittest.TestCase):
     def test_visible_points_request_starts_worker_and_disable_stops_it(self) -> None:
         service = MapMaskService()
+        service.provider = service.local_provider
+        service.fallback_provider = service.local_provider
         service.enabled = True
         service.bigmap_state_provider.set_mode("force-open")
         service.viewport_provider.get_mode = Mock(return_value="hybrid-auto-center")
@@ -329,6 +469,8 @@ class DetectionWorkerLifecycleTests(unittest.TestCase):
 
     def test_worker_exits_after_request_timeout_and_restarts_on_next_request(self) -> None:
         service = MapMaskService()
+        service.provider = service.local_provider
+        service.fallback_provider = service.local_provider
         service.enabled = True
         service.bigmap_state_provider.set_mode("force-closed")
 

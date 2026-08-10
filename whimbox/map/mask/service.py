@@ -24,10 +24,16 @@ _DETECTION_WORKER_IDLE_SECONDS = 2.0
 class MapMaskService:
     def __init__(self) -> None:
         self.local_provider = LocalJsonProvider()
-        self.official_provider = OfficialPearPalProvider(enabled=False)
+        point_provider_name = str(
+            global_config.get("MapMask", "point_provider", "pearpal") or "pearpal"
+        ).strip().lower()
+        use_pearpal = point_provider_name != "local"
+        self.official_provider = OfficialPearPalProvider(enabled=use_pearpal)
         self.viewport_provider = MapMaskViewportProvider()
         self.bigmap_state_provider = BigMapStateProvider()
-        self.provider: MapMaskProvider = self.local_provider
+        self.provider: MapMaskProvider = (
+            self.official_provider if use_pearpal else self.local_provider
+        )
         self.fallback_provider: MapMaskProvider = self.local_provider
         self.enabled = global_config.get_bool("MapMask", "enabled", True)
         self.use_sample_viewport = global_config.get_bool("MapMask", "use_sample_viewport", True)
