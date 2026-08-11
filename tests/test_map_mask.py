@@ -101,6 +101,7 @@ class FakePearPalClient:
                         "name": "收集物",
                         "catalogs": [
                             {"id": 11, "name": "奇想星", "icon": "star.png"},
+                            {"id": 12, "name": "\u7075\u611f\u9732\u73e0", "icon": "dewdrop.png"},
                             {"id": 999, "name": "阶段入口"},
                         ],
                     },
@@ -118,6 +119,7 @@ class FakePearPalClient:
     def fetch_spawners(self, world_id: str):
         return [
             {"id": 100, "world_id": 1, "catalog": 11, "x": 100, "y": 200},
+            {"id": 101, "world_id": 1, "catalog": 12, "x": 150, "y": 250},
             {
                 "id": 200,
                 "world_id": 1,
@@ -141,7 +143,11 @@ class FakePearPalUserClient:
     def fetch_awarded_state(self, credentials: PearPalCredentials):
         if credentials.openid != "12405094":
             raise RuntimeError("unexpected user")
-        return PearPalAwardedState(frozenset({"100"}), frozenset())
+        return PearPalAwardedState(
+            star_ids=frozenset({"100"}),
+            box_ids=frozenset(),
+            dewdrop_ids=frozenset({"101"}),
+        )
 
 
 class OfficialPearPalProviderTests(unittest.TestCase):
@@ -156,8 +162,11 @@ class OfficialPearPalProviderTests(unittest.TestCase):
         points = provider.list_points()
         point_by_id = {point.id: point for point in points}
 
-        self.assertEqual([label.id for label in labels], ["pearpal_star", "pearpal_box"])
-        self.assertEqual(set(point_by_id), {"pearpal:100", "pearpal:201"})
+        self.assertEqual(
+            [label.id for label in labels],
+            ["pearpal_star", "pearpal_dewdrop", "pearpal_box"],
+        )
+        self.assertEqual(set(point_by_id), {"pearpal:100", "pearpal:101", "pearpal:201"})
         self.assertEqual(point_by_id["pearpal:100"].label_id, "pearpal_star")
         self.assertAlmostEqual(
             point_by_id["pearpal:100"].image_x,
@@ -167,6 +176,10 @@ class OfficialPearPalProviderTests(unittest.TestCase):
             point_by_id["pearpal:100"].image_y,
             4.444444444444445,
         )
+        dewdrop = point_by_id["pearpal:101"]
+        self.assertEqual(dewdrop.label_id, "pearpal_dewdrop")
+        self.assertAlmostEqual(dewdrop.image_x, 3.3333333333333335)
+        self.assertAlmostEqual(dewdrop.image_y, 5.555555555555555)
         stage_box = point_by_id["pearpal:201"]
         self.assertEqual(stage_box.label_id, "pearpal_box")
         self.assertAlmostEqual(stage_box.image_x, 6.666666666666667)
@@ -245,6 +258,7 @@ class PearPalUserStateTests(unittest.TestCase):
                 "data": {
                     "star": [100, "101", None],
                     "box": [201, 202],
+                    "dewdrop": [301, 302],
                 },
             }
         )
@@ -253,6 +267,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertEqual(credentials.masked_openid, "12****94")
         self.assertEqual(awarded.star_ids, frozenset({"100", "101"}))
         self.assertEqual(awarded.box_ids, frozenset({"201", "202"}))
+        self.assertEqual(awarded.dewdrop_ids, frozenset({"301", "302"}))
 
     def test_login_filters_awarded_points_and_can_show_them(self) -> None:
         credentials = PearPalCredentials(
@@ -269,13 +284,14 @@ class PearPalUserStateTests(unittest.TestCase):
         )
         self.assertEqual(
             {point.id for point in provider.list_points()},
-            {"pearpal:100", "pearpal:201"},
+            {"pearpal:100", "pearpal:101", "pearpal:201"},
         )
 
         status = provider.start_login()
 
         self.assertTrue(status["authenticated"])
         self.assertEqual(status["matched_awarded_star_count"], 1)
+        self.assertEqual(status["matched_awarded_dewdrop_count"], 1)
         self.assertEqual(
             [point.id for point in provider.list_points()],
             ["pearpal:201"],
@@ -285,7 +301,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertTrue(star["detail"]["awarded"])
         self.assertFalse(star["detail"]["anonymous"])
         provider.disconnect_user()
-        self.assertEqual(len(provider.list_points()), 2)
+        self.assertEqual(len(provider.list_points()), 3)
 
 class CoordinateProjectionTests(unittest.TestCase):
     def test_png_point_projects_to_expected_screen_coordinate(self) -> None:

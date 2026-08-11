@@ -33,6 +33,10 @@ _BOX_CATALOG_GROUP_ID = "14"
 # World 1 currently resolves to catalog 11; keeping the complete known set here
 # makes the classification explicit when more world transforms are added.
 _STAR_CATALOG_IDS = frozenset({"11", "132", "145", "167", "244"})
+# PearPal groups each region's equivalent inspiration collectible under the
+# dewdrop user-state field.
+_DEWDROP_CATALOG_IDS = frozenset({"12", "133", "146", "168", "245"})
+
 
 # The refreshed public world-1 coordinates use the same standard 2/90 scale as
 # the Whimbox full-resolution map and no additional web-map origin offset.
@@ -44,6 +48,12 @@ _MIRALAND_OFFSET_Y = 0.0
 _STAR_LABEL = MapMaskLabel(
     id="pearpal_star",
     name="奇想星",
+    provider="pearpal",
+    default_enabled=True,
+)
+_DEWDROP_LABEL = MapMaskLabel(
+    id="pearpal_dewdrop",
+    name="\u7075\u611f\u9732\u73e0",
     provider="pearpal",
     default_enabled=True,
 )
@@ -98,7 +108,7 @@ class OfficialPearPalProvider:
 
     def list_labels(self) -> list[MapMaskLabel]:
         self._ensure_load_started()
-        return [_STAR_LABEL, _BOX_LABEL]
+        return [_STAR_LABEL, _DEWDROP_LABEL, _BOX_LABEL]
 
     def list_points(
         self,
@@ -192,11 +202,14 @@ class OfficialPearPalProvider:
             credentials = self._credentials
             awarded = self._awarded_state
             matched_star = 0
+            matched_dewdrop = 0
             matched_box = 0
             for point in self._points:
                 source_id = str(point.detail.get("source_id") or "")
                 if point.label_id == _STAR_LABEL.id and source_id in awarded.star_ids:
                     matched_star += 1
+                elif point.label_id == _DEWDROP_LABEL.id and source_id in awarded.dewdrop_ids:
+                    matched_dewdrop += 1
                 elif point.label_id == _BOX_LABEL.id and source_id in awarded.box_ids:
                     matched_box += 1
             return {
@@ -207,8 +220,10 @@ class OfficialPearPalProvider:
                 "openid_masked": credentials.masked_openid if credentials else "",
                 "hide_awarded": self._hide_awarded,
                 "awarded_star_count": len(awarded.star_ids),
+                "awarded_dewdrop_count": len(awarded.dewdrop_ids),
                 "awarded_box_count": len(awarded.box_ids),
                 "matched_awarded_star_count": matched_star,
+                "matched_awarded_dewdrop_count": matched_dewdrop,
                 "matched_awarded_box_count": matched_box,
             }
 
@@ -243,7 +258,8 @@ class OfficialPearPalProvider:
             self._auth_error = ""
         logger.info(
             "loaded PearPal user collection state: "
-            f"star={len(awarded_state.star_ids)}, box={len(awarded_state.box_ids)}"
+            f"star={len(awarded_state.star_ids)}, "
+            f"dewdrop={len(awarded_state.dewdrop_ids)}, box={len(awarded_state.box_ids)}"
         )
 
     def _decorate_point_locked(self, point: MapMaskPoint) -> MapMaskPoint:
@@ -255,6 +271,8 @@ class OfficialPearPalProvider:
                 awarded = source_id in self._awarded_state.star_ids
             elif point.label_id == _BOX_LABEL.id:
                 awarded = source_id in self._awarded_state.box_ids
+            elif point.label_id == _DEWDROP_LABEL.id:
+                awarded = source_id in self._awarded_state.dewdrop_ids
         detail = {
             **point.detail,
             "awarded": awarded,
@@ -294,10 +312,12 @@ class OfficialPearPalProvider:
             self._load_state = "ready"
             self._load_error = ""
         star_count = sum(point.label_id == _STAR_LABEL.id for point in points)
+        dewdrop_count = sum(point.label_id == _DEWDROP_LABEL.id for point in points)
         box_count = sum(point.label_id == _BOX_LABEL.id for point in points)
         logger.info(
             "loaded anonymous PearPal map points: "
-            f"star={star_count}, box={box_count}, total={len(point_by_id)}"
+            f"star={star_count}, dewdrop={dewdrop_count}, box={box_count}, "
+            f"total={len(point_by_id)}"
         )
 
     def _fetch_points(self) -> list[MapMaskPoint]:
@@ -327,6 +347,8 @@ class OfficialPearPalProvider:
                 continue
             if catalog_id in _STAR_CATALOG_IDS:
                 label = _STAR_LABEL
+            elif catalog_id in _DEWDROP_CATALOG_IDS:
+                label = _DEWDROP_LABEL
             elif catalog_id in box_catalog_ids:
                 label = _BOX_LABEL
             else:
