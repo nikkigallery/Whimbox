@@ -107,6 +107,9 @@ class MapMaskService:
                             map_name=map_name,
                             is_bigmap_open=bigmap_state.is_bigmap_open,
                         )
+                    self.official_provider.note_overlay_activity(
+                        is_bigmap_open=bigmap_state.is_bigmap_open,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.exception(f"[map-mask-worker] detection cycle failed: {exc}")
                 else:
@@ -123,6 +126,7 @@ class MapMaskService:
                 if self._detection_thread is current_thread:
                     self._detection_thread = None
                     self._detection_snapshot = None
+            self.official_provider.note_overlay_inactive()
             logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
 
     def _detect_viewport_result(
@@ -257,6 +261,9 @@ class MapMaskService:
 
     def start_pearpal_login(self) -> dict[str, Any]:
         return self.official_provider.start_login()
+
+    def refresh_pearpal_user_state(self) -> dict[str, Any]:
+        return self.official_provider.refresh_user_state()
 
     def disconnect_pearpal_user(self) -> dict[str, Any]:
         return self.official_provider.disconnect_user()

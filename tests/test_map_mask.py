@@ -150,6 +150,25 @@ class FakePearPalUserClient:
         )
 
 
+class MutablePearPalUserClient:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.error: Exception | None = None
+        self.awarded_state = PearPalAwardedState(
+            star_ids=frozenset({"100"}),
+            box_ids=frozenset(),
+            dewdrop_ids=frozenset({"101"}),
+        )
+
+    def fetch_awarded_state(self, credentials: PearPalCredentials):
+        if credentials.openid != "12405094":
+            raise RuntimeError("unexpected user")
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.awarded_state
+
+
 class OfficialPearPalProviderTests(unittest.TestCase):
     def test_loads_star_box_and_expands_stage_child(self) -> None:
         provider = OfficialPearPalProvider(
@@ -302,6 +321,84 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertFalse(star["detail"]["anonymous"])
         provider.disconnect_user()
         self.assertEqual(len(provider.list_points()), 3)
+
+    def test_auto_refresh_manual_refresh_and_failure_backoff(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        user_client = MutablePearPalUserClient()
+        clock = [100.0]
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+            user_client=user_client,
+            login_launcher=lambda: credentials,
+            login_background=False,
+            refresh_background=False,
+        )
+
+        with patch(
+            "whimbox.map.mask.pearpal_provider.time.monotonic",
+            side_effect=lambda: clock[0],
+        ):
+            provider.list_points()
+            login_status = provider.start_login()
+            self.assertEqual(user_client.calls, 1)
+            self.assertEqual(login_status["last_refresh_reason"], "login")
+
+            user_client.awarded_state = PearPalAwardedState(
+                star_ids=frozenset(),
+                box_ids=frozenset({"201"}),
+                dewdrop_ids=frozenset(),
+            )
+            clock[0] = 106.0
+            provider.note_overlay_activity(is_bigmap_open=False)
+            provider.note_overlay_activity(is_bigmap_open=True)
+            self.assertEqual(user_client.calls, 2)
+            self.assertEqual(
+                provider.get_user_status()["last_refresh_reason"],
+                "map-open",
+            )
+            self.assertEqual(
+                {point.id for point in provider.list_points()},
+                {"pearpal:100", "pearpal:101"},
+            )
+
+            clock[0] = 137.0
+            provider.note_overlay_activity(is_bigmap_open=True)
+            self.assertEqual(user_client.calls, 3)
+            self.assertEqual(
+                provider.get_user_status()["last_refresh_reason"],
+                "periodic",
+            )
+
+            user_client.error = RuntimeError("temporary API error")
+            failed_status = provider.refresh_user_state()
+            self.assertEqual(user_client.calls, 4)
+            self.assertEqual(failed_status["refresh_failure_count"], 1)
+            self.assertIn("temporary API error", failed_status["refresh_error"])
+            self.assertAlmostEqual(
+                failed_status["next_refresh_in_seconds"],
+                5.0,
+            )
+            self.assertTrue(
+                provider.get_point_detail("pearpal:201")["detail"]["awarded"]
+            )
+
+            clock[0] = 138.0
+            provider.note_overlay_activity(is_bigmap_open=True)
+            self.assertEqual(user_client.calls, 4)
+
+            user_client.error = None
+            clock[0] = 142.0
+            provider.note_overlay_activity(is_bigmap_open=True)
+            retry_status = provider.get_user_status()
+            self.assertEqual(user_client.calls, 5)
+            self.assertEqual(retry_status["last_refresh_reason"], "retry")
+            self.assertEqual(retry_status["refresh_error"], "")
+
 
 class CoordinateProjectionTests(unittest.TestCase):
     def test_png_point_projects_to_expected_screen_coordinate(self) -> None:

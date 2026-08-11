@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 from dataclasses import replace
 from typing import Any, Callable
 
@@ -36,6 +37,9 @@ _STAR_CATALOG_IDS = frozenset({"11", "132", "145", "167", "244"})
 # PearPal groups each region's equivalent inspiration collectible under the
 # dewdrop user-state field.
 _DEWDROP_CATALOG_IDS = frozenset({"12", "133", "146", "168", "245"})
+_USER_REFRESH_PERIOD_SECONDS = 30.0
+_USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
+_USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
 
 
 # The refreshed public world-1 coordinates use the same standard 2/90 scale as
@@ -86,10 +90,12 @@ class OfficialPearPalProvider:
         user_client: Any | None = None,
         login_launcher: Callable[[], PearPalCredentials] | None = None,
         login_background: bool = True,
+        refresh_background: bool = True,
     ) -> None:
         self.enabled = enabled
         self._client = client or PearPalPublicDebugClient(language=language)
         self._background = background
+        self._refresh_background = refresh_background
         self._language = language
         self._lock = threading.RLock()
         self._user_client = user_client or PearPalUserClient()
@@ -105,6 +111,16 @@ class OfficialPearPalProvider:
         self._auth_error = ""
         self._hide_awarded = True
         self._login_thread: threading.Thread | None = None
+        self._refresh_thread: threading.Thread | None = None
+        self._refreshing = False
+        self._refresh_error = ""
+        self._refresh_failure_count = 0
+        self._refresh_reason = ""
+        self._last_refresh_at = ""
+        self._last_refresh_reason = ""
+        self._last_refresh_monotonic = 0.0
+        self._next_refresh_monotonic = 0.0
+        self._overlay_bigmap_open = False
 
     def list_labels(self) -> list[MapMaskLabel]:
         self._ensure_load_started()
@@ -190,12 +206,150 @@ class OfficialPearPalProvider:
             self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
             self._auth_state = "anonymous"
             self._auth_error = ""
+            self._refreshing = False
+            self._refresh_error = ""
+            self._refresh_failure_count = 0
+            self._refresh_reason = ""
+            self._last_refresh_at = ""
+            self._last_refresh_reason = ""
+            self._last_refresh_monotonic = 0.0
+            self._next_refresh_monotonic = 0.0
+            self._overlay_bigmap_open = False
+            # An in-flight request cannot be cancelled, but its credential
+            # identity check prevents it from restoring disconnected state.
         return self.get_user_status()
 
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
         with self._lock:
             self._hide_awarded = bool(hide_awarded)
         return self.get_user_status()
+
+    def refresh_user_state(self) -> dict[str, Any]:
+        if not self.enabled:
+            raise RuntimeError("OfficialPearPalProvider is disabled")
+        self._schedule_user_refresh(reason="manual", force=True)
+        return self.get_user_status()
+
+    def note_overlay_activity(self, *, is_bigmap_open: bool) -> None:
+        now = time.monotonic()
+        with self._lock:
+            was_bigmap_open = self._overlay_bigmap_open
+            self._overlay_bigmap_open = bool(is_bigmap_open)
+            if self._credentials is None:
+                return
+            map_opened = bool(is_bigmap_open) and not was_bigmap_open
+            retry_due = (
+                self._refresh_failure_count > 0
+                and now >= self._next_refresh_monotonic
+            )
+            periodic_due = (
+                self._last_refresh_monotonic <= 0.0
+                or now - self._last_refresh_monotonic
+                >= _USER_REFRESH_PERIOD_SECONDS
+            )
+        if map_opened:
+            self._schedule_user_refresh(reason="map-open", force=False)
+        elif retry_due:
+            self._schedule_user_refresh(reason="retry", force=False)
+        elif periodic_due:
+            self._schedule_user_refresh(reason="periodic", force=False)
+
+    def note_overlay_inactive(self) -> None:
+        with self._lock:
+            self._overlay_bigmap_open = False
+
+    def _schedule_user_refresh(self, *, reason: str, force: bool) -> bool:
+        with self._lock:
+            credentials = self._credentials
+            refresh_thread_running = bool(
+                self._refresh_thread is not None
+                and self._refresh_thread.is_alive()
+            )
+            if credentials is None or self._refreshing or refresh_thread_running:
+                return False
+            now = time.monotonic()
+            if not force and now < self._next_refresh_monotonic:
+                return False
+            self._refreshing = True
+            self._refresh_error = ""
+            self._refresh_reason = reason
+            if self._refresh_background:
+                thread = threading.Thread(
+                    target=self._refresh_user_state,
+                    args=(credentials, reason),
+                    name="map-mask-pearpal-user-refresh",
+                    daemon=True,
+                )
+                self._refresh_thread = thread
+            else:
+                thread = None
+        if thread is None:
+            self._refresh_user_state(credentials, reason)
+        else:
+            thread.start()
+        return True
+
+    def _refresh_user_state(
+        self,
+        credentials: PearPalCredentials,
+        reason: str,
+    ) -> None:
+        try:
+            awarded_state = self._user_client.fetch_awarded_state(credentials)
+        except Exception as exc:  # noqa: BLE001
+            should_log = False
+            with self._lock:
+                if self._credentials == credentials:
+                    self._refreshing = False
+                    self._refresh_error = str(exc)
+                    self._refresh_reason = ""
+                    self._refresh_failure_count += 1
+                    backoff_index = min(
+                        self._refresh_failure_count - 1,
+                        len(_USER_REFRESH_BACKOFF_SECONDS) - 1,
+                    )
+                    self._next_refresh_monotonic = (
+                        time.monotonic()
+                        + _USER_REFRESH_BACKOFF_SECONDS[backoff_index]
+                    )
+                    should_log = True
+            if should_log:
+                logger.warning(
+                    "failed to refresh PearPal user collection state: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+        else:
+            refreshed = False
+            with self._lock:
+                if self._credentials == credentials:
+                    now = time.monotonic()
+                    self._awarded_state = awarded_state
+                    self._refreshing = False
+                    self._refresh_error = ""
+                    self._refresh_failure_count = 0
+                    self._refresh_reason = ""
+                    self._last_refresh_at = time.strftime(
+                        "%Y-%m-%dT%H:%M:%SZ",
+                        time.gmtime(),
+                    )
+                    self._last_refresh_reason = reason
+                    self._last_refresh_monotonic = now
+                    self._next_refresh_monotonic = (
+                        now + _USER_REFRESH_MIN_INTERVAL_SECONDS
+                    )
+                    refreshed = True
+            if refreshed:
+                logger.info(
+                    "refreshed PearPal user collection state: "
+                    f"reason={reason}, star={len(awarded_state.star_ids)}, "
+                    f"dewdrop={len(awarded_state.dewdrop_ids)}, "
+                    f"box={len(awarded_state.box_ids)}"
+                )
+        finally:
+            with self._lock:
+                if self._refresh_thread is threading.current_thread():
+                    self._refresh_thread = None
+
 
     def get_user_status(self) -> dict[str, Any]:
         with self._lock:
@@ -206,12 +360,27 @@ class OfficialPearPalProvider:
             matched_box = 0
             for point in self._points:
                 source_id = str(point.detail.get("source_id") or "")
-                if point.label_id == _STAR_LABEL.id and source_id in awarded.star_ids:
+                if (
+                    point.label_id == _STAR_LABEL.id
+                    and source_id in awarded.star_ids
+                ):
                     matched_star += 1
-                elif point.label_id == _DEWDROP_LABEL.id and source_id in awarded.dewdrop_ids:
+                elif (
+                    point.label_id == _DEWDROP_LABEL.id
+                    and source_id in awarded.dewdrop_ids
+                ):
                     matched_dewdrop += 1
-                elif point.label_id == _BOX_LABEL.id and source_id in awarded.box_ids:
+                elif (
+                    point.label_id == _BOX_LABEL.id
+                    and source_id in awarded.box_ids
+                ):
                     matched_box += 1
+            next_refresh_in_seconds = 0.0
+            if credentials is not None and self._next_refresh_monotonic > 0.0:
+                next_refresh_in_seconds = max(
+                    0.0,
+                    self._next_refresh_monotonic - time.monotonic(),
+                )
             return {
                 "auth_state": self._auth_state,
                 "authenticated": credentials is not None,
@@ -219,6 +388,13 @@ class OfficialPearPalProvider:
                 "auth_error": self._auth_error,
                 "openid_masked": credentials.masked_openid if credentials else "",
                 "hide_awarded": self._hide_awarded,
+                "refreshing": self._refreshing,
+                "refresh_error": self._refresh_error,
+                "refresh_failure_count": self._refresh_failure_count,
+                "refresh_reason": self._refresh_reason,
+                "last_refresh_at": self._last_refresh_at,
+                "last_refresh_reason": self._last_refresh_reason,
+                "next_refresh_in_seconds": round(next_refresh_in_seconds, 1),
                 "awarded_star_count": len(awarded.star_ids),
                 "awarded_dewdrop_count": len(awarded.dewdrop_ids),
                 "awarded_box_count": len(awarded.box_ids),
@@ -251,15 +427,30 @@ class OfficialPearPalProvider:
             with self._lock:
                 if self._login_thread is threading.current_thread():
                     self._login_thread = None
+        now = time.monotonic()
         with self._lock:
             self._credentials = credentials
             self._awarded_state = awarded_state
             self._auth_state = "authenticated"
             self._auth_error = ""
+            self._refreshing = False
+            self._refresh_error = ""
+            self._refresh_failure_count = 0
+            self._refresh_reason = ""
+            self._last_refresh_at = time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(),
+            )
+            self._last_refresh_reason = "login"
+            self._last_refresh_monotonic = now
+            self._next_refresh_monotonic = (
+                now + _USER_REFRESH_MIN_INTERVAL_SECONDS
+            )
         logger.info(
             "loaded PearPal user collection state: "
             f"star={len(awarded_state.star_ids)}, "
-            f"dewdrop={len(awarded_state.dewdrop_ids)}, box={len(awarded_state.box_ids)}"
+            f"dewdrop={len(awarded_state.dewdrop_ids)}, "
+            f"box={len(awarded_state.box_ids)}"
         )
 
     def _decorate_point_locked(self, point: MapMaskPoint) -> MapMaskPoint:

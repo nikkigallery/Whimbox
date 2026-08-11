@@ -216,6 +216,9 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "map_mask.start_pearpal_login":
         return map_mask_service.start_pearpal_login()
 
+    if method == "map_mask.refresh_pearpal_user_state":
+        return map_mask_service.refresh_pearpal_user_state()
+
     if method == "map_mask.disconnect_pearpal_user":
         return map_mask_service.disconnect_pearpal_user()
 
