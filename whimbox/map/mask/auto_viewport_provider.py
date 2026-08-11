@@ -38,11 +38,6 @@ class HybridAutoCenterViewportProvider:
 
     def __init__(self, manual_provider: ManualCalibrationViewportProvider) -> None:
         self.manual_provider = manual_provider
-        self._detection_interval_ms = _env_int(
-            "WHIMBOX_MAP_MASK_VIEWPORT_DETECTION_INTERVAL_MS",
-            default=500,
-            minimum=100,
-        )
         self._confidence_threshold = _env_float(
             "WHIMBOX_MAP_MASK_VIEWPORT_CONFIDENCE_THRESHOLD",
             default=0.35,
@@ -82,11 +77,6 @@ class HybridAutoCenterViewportProvider:
             "WHIMBOX_MAP_MASK_VIEWPORT_MOTION_DIFF_THRESHOLD",
             default=8.0,
             minimum=0.0,
-        )
-        self._motion_stable_frames = _env_int(
-            "WHIMBOX_MAP_MASK_VIEWPORT_MOTION_STABLE_FRAMES",
-            default=2,
-            minimum=1,
         )
         self._smoothing_mode = _resolve_smoothing_mode()
         self._smoothing_max_distance = _env_float(
@@ -132,9 +122,7 @@ class HybridAutoCenterViewportProvider:
             "WHIMBOX_MAP_MASK_VIEWPORT_REJECT_FAR_EXPECTED_CENTER",
             default=False,
         )
-        self._cached_result: ViewportResult | None = None
-        self._cached_base_signature: tuple[object, ...] | None = None
-        self._last_detection_monotonic = 0.0
+        self._base_signature: tuple[object, ...] | None = None
         self._last_good_result: ViewportResult | None = None
         self._last_good_center: tuple[float, float] | None = None
         self._smoothed_center: tuple[float, float] | None = None
@@ -142,8 +130,6 @@ class HybridAutoCenterViewportProvider:
         self._pending_center: tuple[float, float] | None = None
         self._pending_confirm_count = 0
         self._previous_motion_frame: np.ndarray | None = None
-        self._motion_blocked = False
-        self._motion_stable_count = 0
         self._last_global_check_monotonic = 0.0
         self._tracking_center: tuple[float, float] | None = None
         self._global_check_center: tuple[float, float] | None = None
@@ -159,13 +145,13 @@ class HybridAutoCenterViewportProvider:
     def get_viewport(
         self,
         map_name: str | None = None,
-        force_refresh: bool = False,
+        captured_image: np.ndarray | None = None,
     ) -> ViewportResult:
         base = self.manual_provider.get_viewport(map_name=map_name)
-        captured_image = None
         if base.viewport is None:
             try:
-                captured_image = self._capture_game()
+                if captured_image is None:
+                    captured_image = self._capture_game()
                 base = _automatic_base_viewport(
                     captured_image,
                     map_name=map_name,
@@ -186,30 +172,19 @@ class HybridAutoCenterViewportProvider:
 
         base_signature = _viewport_result_signature(base)
         if (
-            self._cached_base_signature is not None
-            and self._cached_base_signature != base_signature
+            self._base_signature is not None
+            and self._base_signature != base_signature
         ):
             self._reset_tracking()
+        self._base_signature = base_signature
 
         now = time.monotonic()
-        if (
-            not force_refresh
-            and self._cached_result is not None
-            and self._cached_base_signature == base_signature
-            and (now - self._last_detection_monotonic) * 1000 < self._detection_interval_ms
-        ):
-            return self._with_current_age(self._cached_result, now)
-
         try:
             if captured_image is None:
                 image = self._capture_game()
             else:
                 image = captured_image
-            (
-                motion_diff,
-                motion_unstable,
-                motion_just_settled,
-            ) = self._update_motion_state(image)
+            motion_diff, motion_unstable = self._detect_motion(image)
             match = self._detect_tracking_first(
                 image,
                 base.viewport.map_name,
@@ -245,7 +220,6 @@ class HybridAutoCenterViewportProvider:
                     confidence=confidence,
                     raw_center_x=raw_center_x,
                     raw_center_y=raw_center_y,
-                    base_signature=base_signature,
                     tracking_mode="tracking" if self._last_good_center else "reacquire",
                     motion_diff=motion_diff,
                     motion_unstable=motion_unstable,
@@ -276,7 +250,6 @@ class HybridAutoCenterViewportProvider:
                     now=now,
                     selected_match_source=selected_match_source,
                     motion_unstable=motion_unstable,
-                    motion_just_settled=motion_just_settled,
                 )
             if decision["accepted_center"] is None:
                 return self._pending_fallback(
@@ -285,7 +258,6 @@ class HybridAutoCenterViewportProvider:
                     confidence=confidence,
                     jump_distance=decision["jump_distance"],
                     rejected_reason=str(decision["rejected_reason"]),
-                    base_signature=base_signature,
                     now=now,
                     tracking_mode=str(decision["tracking_mode"]),
                     motion_diff=motion_diff,
@@ -331,7 +303,6 @@ class HybridAutoCenterViewportProvider:
                 tracking_mode=str(decision["tracking_mode"]),
                 motion_diff=motion_diff,
                 motion_unstable=motion_unstable,
-                motion_stable_count=self._motion_stable_count,
                 candidate_distance_to_last_good=_optional_number(
                     decision["candidate_distance"]
                 ),
@@ -349,10 +320,7 @@ class HybridAutoCenterViewportProvider:
                 **_span_result_fields(base),
                 **_correction_result_fields(base),
             )
-            self._cached_result = result
-            self._cached_base_signature = base_signature
             self._last_good_result = result
-            self._last_detection_monotonic = now
             return result
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"hybrid auto viewport detection failed: {exc}")
@@ -366,10 +334,9 @@ class HybridAutoCenterViewportProvider:
                 confidence=0.0,
                 raw_center_x=None,
                 raw_center_y=None,
-                base_signature=base_signature,
                 tracking_mode="tracking" if self._last_good_center else "reacquire",
                 motion_diff=None,
-                motion_unstable=self._motion_blocked,
+                motion_unstable=False,
                 local_confidence=None,
                 global_confidence=None,
                 selected_match_source="none",
@@ -705,15 +672,12 @@ class HybridAutoCenterViewportProvider:
             return np.where(tracking_mask, result, -1.0).astype(np.float32)
         return np.where(tracking_mask & (valid > 0), result, -1.0).astype(np.float32)
 
-    def _update_motion_state(self, image) -> tuple[float | None, bool, bool]:
+    def _detect_motion(self, image) -> tuple[float | None, bool]:
         current = _motion_frame(image)
         if self._previous_motion_frame is None:
             self._previous_motion_frame = current
-            self._motion_blocked = False
-            self._motion_stable_count = self._motion_stable_frames
-            return None, False, False
+            return None, False
 
-        was_motion_blocked = self._motion_blocked
         motion_diff = float(
             np.mean(
                 cv2.absdiff(
@@ -723,23 +687,7 @@ class HybridAutoCenterViewportProvider:
             )
         )
         self._previous_motion_frame = current
-        if motion_diff > self._motion_diff_threshold:
-            self._motion_blocked = True
-            self._motion_stable_count = 0
-        elif self._motion_blocked:
-            self._motion_stable_count += 1
-            if self._motion_stable_count >= self._motion_stable_frames:
-                self._motion_blocked = False
-        else:
-            self._motion_stable_count = min(
-                self._motion_stable_frames,
-                self._motion_stable_count + 1,
-            )
-        motion_just_settled = bool(
-            was_motion_blocked
-            and not self._motion_blocked
-        )
-        return motion_diff, self._motion_blocked, motion_just_settled
+        return motion_diff, motion_diff > self._motion_diff_threshold
 
     def _fallback(
         self,
@@ -750,7 +698,6 @@ class HybridAutoCenterViewportProvider:
         confidence: float,
         raw_center_x: float | None,
         raw_center_y: float | None,
-        base_signature: tuple[object, ...],
         tracking_mode: str,
         motion_diff: float | None,
         motion_unstable: bool,
@@ -811,7 +758,6 @@ class HybridAutoCenterViewportProvider:
                 tracking_mode=tracking_mode,
                 motion_diff=motion_diff,
                 motion_unstable=motion_unstable,
-                motion_stable_count=self._motion_stable_count,
                 candidate_distance_to_last_good=jump_distance,
                 local_match_confidence=local_confidence,
                 global_match_confidence=global_confidence,
@@ -866,7 +812,6 @@ class HybridAutoCenterViewportProvider:
                 tracking_mode=tracking_mode,
                 motion_diff=motion_diff,
                 motion_unstable=motion_unstable,
-                motion_stable_count=self._motion_stable_count,
                 candidate_distance_to_last_good=jump_distance,
                 local_match_confidence=local_confidence,
                 global_match_confidence=global_confidence,
@@ -886,9 +831,6 @@ class HybridAutoCenterViewportProvider:
                 ),
             )
 
-        self._cached_result = result
-        self._cached_base_signature = base_signature
-        self._last_detection_monotonic = time.monotonic()
         return result
 
     def _stabilize_center(
@@ -898,7 +840,6 @@ class HybridAutoCenterViewportProvider:
         now: float,
         selected_match_source: str,
         motion_unstable: bool,
-        motion_just_settled: bool,
     ) -> dict[str, object]:
         candidate_distance = (
             _distance(raw_center, self._last_good_center)
@@ -907,23 +848,6 @@ class HybridAutoCenterViewportProvider:
         )
         tracking_mode = "tracking" if self._last_good_center is not None else "reacquire"
         jump_distance = candidate_distance
-        if motion_unstable:
-            self._reset_pending()
-            return {
-                "accepted_center": None,
-                "jump_distance": jump_distance,
-                "candidate_distance": candidate_distance,
-                "accept_reason": "",
-                "rejected_reason": "rejected-motion-unstable",
-                "tracking_mode": tracking_mode,
-                "smoothing_applied": False,
-                "smoothing_distance": _distance_optional(
-                    raw_center,
-                    self._smoothed_center,
-                ),
-                "snap_reason": "",
-            }
-
         if (
             self._last_good_center is not None
             and candidate_distance is not None
@@ -933,11 +857,11 @@ class HybridAutoCenterViewportProvider:
             smoothing = self._accept_center(
                 raw_center,
                 now=now,
-                confirmed_jump=motion_just_settled,
+                confirmed_jump=motion_unstable,
             )
             reason = (
-                "tracking-motion-settled"
-                if motion_just_settled
+                "tracking-motion-active"
+                if motion_unstable
                 else "tracking-local-match"
             )
             if selected_match_source != "local":
@@ -1075,7 +999,6 @@ class HybridAutoCenterViewportProvider:
         confidence: float,
         jump_distance: object,
         rejected_reason: str,
-        base_signature: tuple[object, ...],
         now: float,
         tracking_mode: str,
         motion_diff: float | None,
@@ -1139,7 +1062,6 @@ class HybridAutoCenterViewportProvider:
             "tracking_mode": tracking_mode,
             "motion_diff": motion_diff,
             "motion_unstable": motion_unstable,
-            "motion_stable_count": self._motion_stable_count,
             "candidate_distance_to_last_good": _optional_number(jump_distance),
             "local_match_confidence": local_confidence,
             "global_match_confidence": global_confidence,
@@ -1172,9 +1094,6 @@ class HybridAutoCenterViewportProvider:
                 ),
                 **common,
             )
-        self._cached_result = result
-        self._cached_base_signature = base_signature
-        self._last_detection_monotonic = now
         return result
 
     def _applied_center(self) -> tuple[float, float]:
@@ -1204,22 +1123,17 @@ class HybridAutoCenterViewportProvider:
         current = time.monotonic() if now is None else now
         return max(0.0, (current - self._last_good_center_monotonic) * 1000)
 
-    def _with_current_age(self, result: ViewportResult, now: float) -> ViewportResult:
-        return replace(result, last_good_center_age_ms=self._last_good_age_ms(now))
-
     def _reset_pending(self) -> None:
         self._pending_center = None
         self._pending_confirm_count = 0
 
     def _reset_tracking(self) -> None:
-        self._cached_result = None
+        self._base_signature = None
         self._last_good_result = None
         self._last_good_center = None
         self._smoothed_center = None
         self._last_good_center_monotonic = None
         self._previous_motion_frame = None
-        self._motion_blocked = False
-        self._motion_stable_count = 0
         self._last_global_check_monotonic = 0.0
         self._tracking_center = None
         self._global_check_center = None

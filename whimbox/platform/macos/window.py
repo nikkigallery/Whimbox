@@ -124,6 +124,9 @@ class MacOSWindowManager(WindowManager):
             )
         return 0, 0, 0, 0
 
+    def get_window_scale_factor(self, native_handle: Any, pid: Optional[int]) -> float:
+        return 1.0
+
     def client_to_screen(self, native_handle: Any, x: int, y: int) -> tuple[int, int]:
         """On macOS the Quartz origin is the screen origin, so client == screen."""
         pid = self.get_pid(native_handle, None)

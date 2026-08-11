@@ -177,7 +177,6 @@ class MapMaskState:
     tracking_mode: str = "idle"
     motion_diff: float | None = None
     motion_unstable: bool = False
-    motion_stable_count: int = 0
     candidate_distance_to_last_good: float | None = None
     local_match_confidence: float | None = None
     global_match_confidence: float | None = None
@@ -214,16 +213,10 @@ class MapMaskState:
     detection_source: str = "unknown"
     detection_confidence: float = 0.0
     raw_is_bigmap_open: bool = False
-    stable_is_bigmap_open: bool = False
-    consecutive_open_count: int = 0
-    consecutive_closed_count: int = 0
     detection_error: str = ""
     last_detection_time: str = ""
     last_successful_detection_time: str = ""
     detection_duration_ms: float = 0.0
-    detection_interval_ms: int = 500
-    stable_open_frames: int = 2
-    stable_closed_frames: int = 2
     debug: bool = True
     message: str = ""
 

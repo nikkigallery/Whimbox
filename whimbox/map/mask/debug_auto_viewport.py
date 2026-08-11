@@ -408,7 +408,7 @@ def _format_state_line(
         f"{timestamp} "
         f"bigmap={_bool_word(state.get('is_bigmap_open'))} "
         f"raw={_bool_word(state.get('raw_is_bigmap_open'))} "
-        f"stable={_bool_word(state.get('stable_is_bigmap_open'))} "
+        f"open={_bool_word(state.get('is_bigmap_open'))} "
         f"capture={_capture_status(state)} "
         f"mode={state.get('viewport_mode') or 'n/a'} "
         f"source={state.get('viewport_source') or 'n/a'} "
@@ -436,7 +436,6 @@ def _format_state_line(
         f"tracking={state.get('tracking_mode') or 'idle'} "
         f"motion_diff={_num(state.get('motion_diff'), digits=2)} "
         f"motion_unstable={_bool_word(state.get('motion_unstable'))} "
-        f"motion_stable_count={int(state.get('motion_stable_count') or 0)} "
         f"candidate_distance={_num(state.get('candidate_distance_to_last_good'))} "
         f"local_confidence={_num(state.get('local_match_confidence'), digits=3)} "
         f"global_confidence={_num(state.get('global_match_confidence'), digits=3)} "
@@ -521,7 +520,6 @@ def _build_frame_record(
         "tracking_mode": state.get("tracking_mode") or "idle",
         "motion_diff": state.get("motion_diff"),
         "motion_unstable": bool(state.get("motion_unstable")),
-        "motion_stable_count": int(state.get("motion_stable_count") or 0),
         "candidate_distance_to_last_good": state.get(
             "candidate_distance_to_last_good"
         ),
@@ -1120,9 +1118,7 @@ def _stability_environment() -> dict[str, str]:
         "WHIMBOX_MAP_MASK_VIEWPORT_REACQUIRE_CONFIRM_FRAMES",
         "WHIMBOX_MAP_MASK_VIEWPORT_REACQUIRE_PENDING_RADIUS",
         "WHIMBOX_MAP_MASK_VIEWPORT_MOTION_DIFF_THRESHOLD",
-        "WHIMBOX_MAP_MASK_VIEWPORT_MOTION_STABLE_FRAMES",
         "WHIMBOX_MAP_MASK_VIEWPORT_CONFIDENCE_THRESHOLD",
-        "WHIMBOX_MAP_MASK_VIEWPORT_DETECTION_INTERVAL_MS",
         "WHIMBOX_MAP_MASK_VIEWPORT_GLOBAL_CHECK_INTERVAL_MS",
         "WHIMBOX_MAP_MASK_VIEWPORT_GLOBAL_CHECK_DELTA_THRESHOLD",
         "WHIMBOX_MAP_MASK_VIEWPORT_GLOBAL_MATCH_MIN_MARGIN",

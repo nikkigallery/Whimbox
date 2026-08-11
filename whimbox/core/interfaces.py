@@ -56,6 +56,10 @@ class WindowManager(ABC):
         """Return (x, y, width, height) of the window in screen coordinates."""
 
     @abstractmethod
+    def get_window_scale_factor(self, native_handle: Any, pid: Optional[int]) -> float:
+        """Return the native-pixel to logical-coordinate scale factor."""
+
+    @abstractmethod
     def client_to_screen(self, native_handle: Any, x: int, y: int) -> tuple[int, int]:
         """Convert client-area coordinates to screen coordinates."""
 

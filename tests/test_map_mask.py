@@ -14,6 +14,7 @@ from whimbox.map.mask.auto_viewport_provider import (
     HybridAutoCenterViewportProvider,
 )
 from whimbox.map.mask.bigmap_match_diagnostics import BigMapMatchAnalysis
+from whimbox.map.mask.bigmap_state_provider import BigMapStateProvider
 from whimbox.map.mask.coordinate import point_to_visible
 from whimbox.map.mask.local_provider import LocalJsonProvider
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
@@ -478,6 +479,20 @@ class BigMapMatchGuardTests(unittest.TestCase):
         self.assertEqual(status, "matching_provisional")
 
 
+class BigMapStateProviderTests(unittest.TestCase):
+    def test_each_detection_uses_the_current_single_frame_result(self) -> None:
+        provider = BigMapStateProvider()
+        provider.set_mode("auto")
+        provider._detect_with_whimbox_page = Mock(side_effect=[True, False])
+
+        opened = provider.detect()
+        closed = provider.detect()
+
+        self.assertTrue(opened.is_bigmap_open)
+        self.assertFalse(closed.is_bigmap_open)
+        self.assertEqual(provider._detect_with_whimbox_page.call_count, 2)
+
+
 class AutomaticViewportTrackingTests(unittest.TestCase):
     def test_hybrid_auto_center_is_the_default_mode(self) -> None:
         with patch.dict(
@@ -487,28 +502,19 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         ):
             self.assertEqual(_resolve_viewport_mode(), "hybrid-auto-center")
 
-    def test_motion_state_reports_single_settled_transition(self) -> None:
+    def test_motion_detection_only_reports_current_frame_change(self) -> None:
         manual_provider = Mock()
         provider = HybridAutoCenterViewportProvider(manual_provider)
-        provider._motion_stable_frames = 2
         still = np.zeros((180, 320), dtype=np.uint8)
         moved = np.full((180, 320), 255, dtype=np.uint8)
 
-        initial = provider._update_motion_state(still)
-        moving = provider._update_motion_state(moved)
-        settling = provider._update_motion_state(moved)
-        settled = provider._update_motion_state(moved)
-        stable = provider._update_motion_state(moved)
+        initial = provider._detect_motion(still)
+        moving = provider._detect_motion(moved)
+        stable = provider._detect_motion(moved)
 
-        self.assertEqual(initial, (None, False, False))
+        self.assertEqual(initial, (None, False))
         self.assertTrue(moving[1])
-        self.assertFalse(moving[2])
-        self.assertTrue(settling[1])
-        self.assertFalse(settling[2])
-        self.assertFalse(settled[1])
-        self.assertTrue(settled[2])
         self.assertFalse(stable[1])
-        self.assertFalse(stable[2])
 
     def test_dragged_map_center_moves_projected_point(self) -> None:
         manual_provider = Mock()
@@ -523,12 +529,12 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         provider._capture_game = Mock(
             return_value=np.zeros((1080, 1920, 4), dtype=np.uint8)
         )
-        provider._update_motion_state = Mock(
+        provider._detect_motion = Mock(
             side_effect=[
-                (0.0, False, False),
-                (0.0, False, False),
-                (20.0, True, False),
-                (0.0, False, True),
+                (0.0, False),
+                (0.0, False),
+                (20.0, True),
+                (0.0, False),
             ]
         )
         provider._detect_tracking_first = Mock(
@@ -579,10 +585,11 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
             side_effect=lambda _image, _map_name, match, **_kwargs: match
         )
 
-        pending = provider.get_viewport(force_refresh=True)
-        first = provider.get_viewport(force_refresh=True)
-        during_drag = provider.get_viewport(force_refresh=True)
-        second = provider.get_viewport(force_refresh=True)
+        pending = provider.get_viewport()
+        first = provider.get_viewport()
+        during_drag = provider.get_viewport()
+        second = provider.get_viewport()
+        self.assertEqual(provider._detect_tracking_first.call_count, 4)
         self.assertIsNone(pending.viewport)
         self.assertIsNotNone(first.viewport)
         self.assertIsNotNone(during_drag.viewport)
@@ -590,10 +597,16 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         assert first.viewport is not None
         assert during_drag.viewport is not None
         assert second.viewport is not None
-        self.assertEqual(during_drag.viewport, first.viewport)
+        self.assertNotEqual(during_drag.viewport, first.viewport)
+        self.assertEqual(during_drag.center_x, 16100.0)
+        self.assertEqual(during_drag.center_y, 14000.0)
+        self.assertTrue(during_drag.motion_unstable)
+        self.assertEqual(during_drag.center_accept_reason, "tracking-motion-active")
+        self.assertFalse(during_drag.smoothing_applied)
         self.assertEqual(second.center_x, 16100.0)
         self.assertEqual(second.center_y, 14000.0)
-        self.assertFalse(second.smoothing_applied)
+        self.assertEqual(second.viewport, during_drag.viewport)
+        self.assertEqual(second.center_accept_reason, "tracking-local-match")
 
         point = MapMaskPoint.from_dict(
             {
@@ -603,13 +616,13 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
             }
         )
         first_visible = point_to_visible(point, first.viewport)
-        second_visible = point_to_visible(point, second.viewport)
+        during_drag_visible = point_to_visible(point, during_drag.viewport)
         self.assertIsNotNone(first_visible)
-        self.assertIsNotNone(second_visible)
+        self.assertIsNotNone(during_drag_visible)
         assert first_visible is not None
-        assert second_visible is not None
-        self.assertLess(second_visible.screen_x, first_visible.screen_x)
-        self.assertAlmostEqual(second_visible.screen_y, first_visible.screen_y)
+        assert during_drag_visible is not None
+        self.assertLess(during_drag_visible.screen_x, first_visible.screen_x)
+        self.assertAlmostEqual(during_drag_visible.screen_y, first_visible.screen_y)
 
 
 class DetectionWorkerLifecycleTests(unittest.TestCase):

@@ -17,7 +17,7 @@ from .provider import MapMaskProvider
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 
-_DETECTION_WORKER_INTERVAL_SECONDS = 0.05
+_DETECTION_WORKER_DELAY_SECONDS = 0.01
 _DETECTION_WORKER_IDLE_SECONDS = 2.0
 
 
@@ -99,13 +99,18 @@ class MapMaskService:
                         break
                     map_name = self._detection_map_name
 
-                cycle_started = time.perf_counter()
                 try:
                     with self._detection_provider_lock:
-                        bigmap_state = self.bigmap_state_provider.detect()
+                        from whimbox.interaction.interaction_core import itt
+
+                        captured_image = itt.capture()
+                        bigmap_state = self.bigmap_state_provider.detect(
+                            captured_image=captured_image,
+                        )
                         viewport_result = self._detect_viewport_result(
                             map_name=map_name,
                             is_bigmap_open=bigmap_state.is_bigmap_open,
+                            captured_image=captured_image,
                         )
                     self.official_provider.note_overlay_activity(
                         is_bigmap_open=bigmap_state.is_bigmap_open,
@@ -117,9 +122,7 @@ class MapMaskService:
                         if self.enabled and self._detection_thread is current_thread:
                             self._detection_snapshot = (bigmap_state, viewport_result)
 
-                elapsed = time.perf_counter() - cycle_started
-                wait_seconds = max(0.0, _DETECTION_WORKER_INTERVAL_SECONDS - elapsed)
-                self._detection_wake.wait(wait_seconds)
+                self._detection_wake.wait(_DETECTION_WORKER_DELAY_SECONDS)
                 self._detection_wake.clear()
         finally:
             with self._detection_lock:
@@ -134,6 +137,7 @@ class MapMaskService:
         *,
         map_name: str | None,
         is_bigmap_open: bool,
+        captured_image: Any | None = None,
     ) -> ViewportResult:
         if not is_bigmap_open:
             return ViewportResult(
@@ -151,7 +155,7 @@ class MapMaskService:
             )
         return self.viewport_provider.get_viewport(
             map_name=map_name,
-            force_refresh=True,
+            captured_image=captured_image,
         )
 
     def _get_detection_snapshot(
@@ -167,9 +171,6 @@ class MapMaskService:
         return BigMapDetectionState(
             is_bigmap_open=False,
             raw_is_bigmap_open=False,
-            stable_is_bigmap_open=False,
-            consecutive_open_count=0,
-            consecutive_closed_count=0,
             detection_mode=mode,
             detection_source="worker.pending",
             detection_confidence=0.0,
@@ -177,9 +178,6 @@ class MapMaskService:
             last_detection_time="",
             last_successful_detection_time="",
             detection_duration_ms=0.0,
-            detection_interval_ms=int(_DETECTION_WORKER_INTERVAL_SECONDS * 1000),
-            stable_open_frames=2,
-            stable_closed_frames=2,
             message="map-mask detection worker is pending or inactive",
         )
 
@@ -368,7 +366,6 @@ class MapMaskService:
             tracking_mode=viewport_result.tracking_mode,
             motion_diff=viewport_result.motion_diff,
             motion_unstable=viewport_result.motion_unstable,
-            motion_stable_count=viewport_result.motion_stable_count,
             candidate_distance_to_last_good=viewport_result.candidate_distance_to_last_good,
             local_match_confidence=viewport_result.local_match_confidence,
             global_match_confidence=viewport_result.global_match_confidence,
@@ -407,16 +404,10 @@ class MapMaskService:
             detection_source=bigmap_state.detection_source,
             detection_confidence=bigmap_state.detection_confidence,
             raw_is_bigmap_open=bigmap_state.raw_is_bigmap_open,
-            stable_is_bigmap_open=bigmap_state.stable_is_bigmap_open,
-            consecutive_open_count=bigmap_state.consecutive_open_count,
-            consecutive_closed_count=bigmap_state.consecutive_closed_count,
             detection_error=bigmap_state.detection_error,
             last_detection_time=bigmap_state.last_detection_time,
             last_successful_detection_time=bigmap_state.last_successful_detection_time,
             detection_duration_ms=bigmap_state.detection_duration_ms,
-            detection_interval_ms=bigmap_state.detection_interval_ms,
-            stable_open_frames=bigmap_state.stable_open_frames,
-            stable_closed_frames=bigmap_state.stable_closed_frames,
             debug=self.use_sample_viewport,
             message=bigmap_state.message,
         )

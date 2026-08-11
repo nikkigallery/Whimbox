@@ -1,6 +1,7 @@
 """Windows window management implementation using win32 APIs."""
 from __future__ import annotations
 
+import ctypes
 import psutil
 import time
 from typing import Any, Optional
@@ -140,6 +141,19 @@ class WindowsWindowManager(WindowManager):
             return left, top, width, height
         except Exception:
             return 0, 0, 0, 0
+
+    def get_window_scale_factor(self, native_handle: Any, pid: Optional[int]) -> float:
+        hwnd: int = native_handle or 0
+        if not hwnd:
+            return 1.0
+        try:
+            get_dpi_for_window = ctypes.windll.user32.GetDpiForWindow
+            get_dpi_for_window.argtypes = [ctypes.c_void_p]
+            get_dpi_for_window.restype = ctypes.c_uint
+            dpi = int(get_dpi_for_window(hwnd))
+            return dpi / 96.0 if dpi > 0 else 1.0
+        except Exception:
+            return 1.0
 
     def client_to_screen(self, native_handle: Any, x: int, y: int) -> tuple[int, int]:
         return win32gui.ClientToScreen(native_handle, (x, y))

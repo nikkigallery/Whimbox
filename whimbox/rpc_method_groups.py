@@ -177,6 +177,63 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if not method.startswith("map_mask."):
         return UNHANDLED
 
+    if method == "map_mask.get_game_window_state":
+        from whimbox.common.handle_lib import HANDLE_OBJ
+
+        if not HANDLE_OBJ.is_alive():
+            HANDLE_OBJ.refresh_handle()
+
+        handle = HANDLE_OBJ.get_handle()
+        found = bool(HANDLE_OBJ.is_alive())
+        physical_x, physical_y, physical_width, physical_height = (
+            HANDLE_OBJ.get_window_rect() if found else (0, 0, 0, 0)
+        )
+        scale_factor = HANDLE_OBJ.get_window_scale_factor() if found else 1.0
+        if scale_factor <= 0:
+            scale_factor = 1.0
+        x = round(physical_x / scale_factor)
+        y = round(physical_y / scale_factor)
+        width = round(physical_width / scale_factor)
+        height = round(physical_height / scale_factor)
+        client_area_available = found and width > 0 and height > 0
+        client_rect = None
+        if client_area_available:
+            client_rect = {
+                "left": x,
+                "top": y,
+                "right": x + width,
+                "bottom": y + height,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+            }
+
+        return {
+            "found": found,
+            "matchedBy": "process",
+            "title": None,
+            "handle": str(handle) if found else None,
+            "processName": HANDLE_OBJ.process_name,
+            "pid": HANDLE_OBJ.pid if found else None,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "appliedBoundsSource": "client-area",
+            "clientAreaAvailable": client_area_available,
+            "clientX": x if client_area_available else None,
+            "clientY": y if client_area_available else None,
+            "clientWidth": width if client_area_available else None,
+            "clientHeight": height if client_area_available else None,
+            "windowRect": None,
+            "clientRect": client_rect,
+            "dpiScale": scale_factor,
+            "scaleFactor": scale_factor,
+            "isForeground": HANDLE_OBJ.is_foreground() if found else False,
+            "isMinimized": bool(HANDLE_OBJ.is_minimized()) if found else False,
+        }
+
     from whimbox.map.mask.service import map_mask_service
 
     if method == "map_mask.get_state":

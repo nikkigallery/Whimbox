@@ -139,7 +139,7 @@ def _main_capture_debug(argv: list[str]) -> int:
     print(
         "  bigmap="
         f"{state.get('is_bigmap_open')} raw={state.get('raw_is_bigmap_open')} "
-        f"stable={state.get('stable_is_bigmap_open')} source={state.get('detection_source')}",
+        f"open={state.get('is_bigmap_open')} source={state.get('detection_source')}",
         flush=True,
     )
     print(

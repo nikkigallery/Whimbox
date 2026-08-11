@@ -48,9 +48,6 @@ def main() -> None:
         signature = (
             state.get("is_bigmap_open"),
             state.get("raw_is_bigmap_open"),
-            state.get("stable_is_bigmap_open"),
-            state.get("consecutive_open_count"),
-            state.get("consecutive_closed_count"),
             state.get("detection_source"),
             state.get("detection_error"),
         )
@@ -159,10 +156,7 @@ def _format_state(state: dict[str, Any]) -> str:
         f"{state.get('last_detection_time') or 'pending'} "
         f"mode={state.get('detection_mode')} "
         f"raw={state.get('raw_is_bigmap_open')} "
-        f"stable={state.get('stable_is_bigmap_open')} "
         f"open={state.get('is_bigmap_open')} "
-        f"open_count={state.get('consecutive_open_count')} "
-        f"closed_count={state.get('consecutive_closed_count')} "
         f"confidence={float(state.get('detection_confidence') or 0):.2f} "
         f"duration_ms={float(state.get('detection_duration_ms') or 0):.2f} "
         f"source={state.get('detection_source')}"

@@ -1,6 +1,7 @@
 from typing import List, Union
 
 from whimbox.common.utils.asset_utils import get_name_from_caller
+from whimbox.common.utils.img_utils import crop
 from whimbox.ui.template.img_manager import ImgIcon
 from whimbox.ui.template.text_manager import Text
 from whimbox.ui.ui_assets import AreaPageTitleFeature
@@ -35,11 +36,14 @@ class UIPage():
         """
         self.links[destination] = button
 
-    def is_current_page(self, itt):
+    def is_current_page(self, itt, cap=None):
         for imgicon in self.check_icon_list:
             ret = False
             if isinstance(imgicon, ImgIcon):
-                ret = itt.get_img_existence(imgicon)
+                icon_cap = cap
+                if cap is not None and imgicon.cap_posi is not None:
+                    icon_cap = crop(cap, imgicon.cap_posi)
+                ret = itt.get_img_existence(imgicon, cap=icon_cap)
             elif isinstance(imgicon, Text):
                 ret = itt.get_text_existence(imgicon)
             if ret:
@@ -55,6 +59,6 @@ class TitlePage(UIPage):
         self.title = title
         self.links = {}
 
-    def is_current_page(self, itt):
+    def is_current_page(self, itt, cap=None):
         return itt.ocr_single_line(area=AreaPageTitleFeature, hsv_limit=([0, 0, 220], [179, 35, 255])) == self.title
 

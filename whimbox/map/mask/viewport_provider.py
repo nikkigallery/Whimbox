@@ -5,7 +5,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from whimbox.common.logger import logger
 from whimbox.map.detection.cvars import BIGMAP_POSITION_SCALE_DICT
@@ -55,7 +55,6 @@ class ViewportResult:
     tracking_mode: str = "idle"
     motion_diff: float | None = None
     motion_unstable: bool = False
-    motion_stable_count: int = 0
     candidate_distance_to_last_good: float | None = None
     local_match_confidence: float | None = None
     global_match_confidence: float | None = None
@@ -100,7 +99,7 @@ class MapMaskViewportProvider:
         self,
         map_name: str | None = None,
         mode: str | None = None,
-        force_refresh: bool = False,
+        captured_image: Any | None = None,
     ) -> ViewportResult:
         viewport_mode = _resolve_viewport_mode(mode)
         if viewport_mode == "sample":
@@ -110,7 +109,7 @@ class MapMaskViewportProvider:
         if viewport_mode == "hybrid-auto-center":
             return self._hybrid_with_fallback(
                 map_name=map_name,
-                force_refresh=force_refresh,
+                captured_image=captured_image,
             )
         return self._auto_placeholder_with_fallback(map_name=map_name)
 
@@ -149,7 +148,7 @@ class MapMaskViewportProvider:
     def _hybrid_with_fallback(
         self,
         map_name: str | None = None,
-        force_refresh: bool = False,
+        captured_image: Any | None = None,
     ) -> ViewportResult:
         if self.hybrid_provider is None:
             from .auto_viewport_provider import HybridAutoCenterViewportProvider
@@ -157,7 +156,7 @@ class MapMaskViewportProvider:
             self.hybrid_provider = HybridAutoCenterViewportProvider(self.manual_provider)
         hybrid = self.hybrid_provider.get_viewport(
             map_name=map_name,
-            force_refresh=force_refresh,
+            captured_image=captured_image,
         )
         if hybrid.viewport is not None:
             return hybrid
@@ -198,7 +197,6 @@ class MapMaskViewportProvider:
         fallback.tracking_mode = hybrid.tracking_mode
         fallback.motion_diff = hybrid.motion_diff
         fallback.motion_unstable = hybrid.motion_unstable
-        fallback.motion_stable_count = hybrid.motion_stable_count
         fallback.candidate_distance_to_last_good = hybrid.candidate_distance_to_last_good
         fallback.local_match_confidence = hybrid.local_match_confidence
         fallback.global_match_confidence = hybrid.global_match_confidence
