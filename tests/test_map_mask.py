@@ -18,6 +18,12 @@ from whimbox.map.mask.coordinate import point_to_visible
 from whimbox.map.mask.local_provider import LocalJsonProvider
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
 from whimbox.map.mask.pearpal_provider import OfficialPearPalProvider
+from whimbox.map.mask.pearpal_auth import (
+    PearPalAwardedState,
+    PearPalCredentials,
+    decode_user_info,
+    parse_webview_login,
+)
 from whimbox.map.mask.resource_paths import package_map_mask_dir
 from whimbox.map.mask.service import MapMaskService
 from whimbox.map.mask.viewport_provider import ViewportResult, _resolve_viewport_mode
@@ -131,6 +137,13 @@ class FakePearPalClient:
         }, None
 
 
+class FakePearPalUserClient:
+    def fetch_awarded_state(self, credentials: PearPalCredentials):
+        if credentials.openid != "12405094":
+            raise RuntimeError("unexpected user")
+        return PearPalAwardedState(frozenset({"100"}), frozenset())
+
+
 class OfficialPearPalProviderTests(unittest.TestCase):
     def test_loads_star_box_and_expands_stage_child(self) -> None:
         provider = OfficialPearPalProvider(
@@ -216,6 +229,63 @@ class OfficialPearPalProviderTests(unittest.TestCase):
         self.assertEqual(status["points_source"], "pearpal-public-error")
         self.assertIn("public API unavailable", status["points_error"])
 
+
+class PearPalUserStateTests(unittest.TestCase):
+    def test_parses_login_storage_and_user_info_ids(self) -> None:
+        credentials = parse_webview_login(
+            {
+                "status": "ok",
+                "momoToken": '{"token":"abcDEF0123456789","time":1786062221854}',
+                "momoNid": '"12405094"',
+            }
+        )
+        awarded = decode_user_info(
+            {
+                "code": 0,
+                "data": {
+                    "star": [100, "101", None],
+                    "box": [201, 202],
+                },
+            }
+        )
+
+        self.assertEqual(credentials.openid, "12405094")
+        self.assertEqual(credentials.masked_openid, "12****94")
+        self.assertEqual(awarded.star_ids, frozenset({"100", "101"}))
+        self.assertEqual(awarded.box_ids, frozenset({"201", "202"}))
+
+    def test_login_filters_awarded_points_and_can_show_them(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+            user_client=FakePearPalUserClient(),
+            login_launcher=lambda: credentials,
+            login_background=False,
+        )
+        self.assertEqual(
+            {point.id for point in provider.list_points()},
+            {"pearpal:100", "pearpal:201"},
+        )
+
+        status = provider.start_login()
+
+        self.assertTrue(status["authenticated"])
+        self.assertEqual(status["matched_awarded_star_count"], 1)
+        self.assertEqual(
+            [point.id for point in provider.list_points()],
+            ["pearpal:201"],
+        )
+        provider.set_hide_awarded(False)
+        star = provider.get_point_detail("pearpal:100")
+        self.assertTrue(star["detail"]["awarded"])
+        self.assertFalse(star["detail"]["anonymous"])
+        provider.disconnect_user()
+        self.assertEqual(len(provider.list_points()), 2)
 
 class CoordinateProjectionTests(unittest.TestCase):
     def test_png_point_projects_to_expected_screen_coordinate(self) -> None:

@@ -252,6 +252,19 @@ class MapMaskService:
     def get_point_detail(self, point_id: str) -> dict[str, Any]:
         return self._provider_with_fallback().get_point_detail(point_id)
 
+    def get_user_status(self) -> dict[str, Any]:
+        return self.official_provider.get_user_status()
+
+    def start_pearpal_login(self) -> dict[str, Any]:
+        return self.official_provider.start_login()
+
+    def disconnect_pearpal_user(self) -> dict[str, Any]:
+        return self.official_provider.disconnect_user()
+
+    def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
+        return self.official_provider.set_hide_awarded(hide_awarded)
+
+
     def get_viewport(self, map_name: str | None = None) -> MapMaskViewport | None:
         if not self.use_sample_viewport:
             return None

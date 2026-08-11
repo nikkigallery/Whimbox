@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import math
 import threading
-from typing import Any
+from dataclasses import replace
+from typing import Any, Callable
 
 from whimbox.common.logger import logger
 
+from .pearpal_auth import (
+    PearPalAwardedState,
+    PearPalCredentials,
+    PearPalLoginCancelled,
+    PearPalUserClient,
+    launch_login_webview,
+)
 from .models import MapMaskLabel, MapMaskPoint
 from .pearpal_debug import (
     PearPalPublicDebugClient,
@@ -52,8 +60,8 @@ class OfficialPearPalProvider:
 
     Loading starts lazily on the first overlay request. Production callers use
     a daemon thread so public API latency never blocks the 50 ms overlay poll.
-    Authentication and per-user awarded-state filtering intentionally live
-    outside this first anonymous implementation.
+    Authentication runs in an isolated Python WebView process; only the backend
+    receives credentials and applies per-user awarded-state filtering.
     """
 
     name = "pearpal"
@@ -65,16 +73,28 @@ class OfficialPearPalProvider:
         client: Any | None = None,
         background: bool = True,
         language: str = "zh-cn",
+        user_client: Any | None = None,
+        login_launcher: Callable[[], PearPalCredentials] | None = None,
+        login_background: bool = True,
     ) -> None:
         self.enabled = enabled
         self._client = client or PearPalPublicDebugClient(language=language)
         self._background = background
         self._language = language
         self._lock = threading.RLock()
+        self._user_client = user_client or PearPalUserClient()
+        self._login_launcher = login_launcher or launch_login_webview
+        self._login_background = login_background
         self._load_state = "idle"
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
         self._point_by_id: dict[str, MapMaskPoint] = {}
+        self._credentials: PearPalCredentials | None = None
+        self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
+        self._auth_state = "anonymous"
+        self._auth_error = ""
+        self._hide_awarded = True
+        self._login_thread: threading.Thread | None = None
 
     def list_labels(self) -> list[MapMaskLabel]:
         self._ensure_load_started()
@@ -89,7 +109,12 @@ class OfficialPearPalProvider:
         if map_name and map_name != _MAP_NAME:
             return []
         with self._lock:
-            points = list(self._points)
+            points = [self._decorate_point_locked(point) for point in self._points]
+            hide_awarded = self._hide_awarded and self._credentials is not None
+        if hide_awarded:
+            points = [
+                point for point in points if not bool(point.detail.get("awarded"))
+            ]
         if label_ids is not None:
             selected = set(label_ids)
             points = [point for point in points if point.label_id in selected]
@@ -99,6 +124,8 @@ class OfficialPearPalProvider:
         self._ensure_load_started()
         with self._lock:
             point = self._point_by_id.get(str(point_id))
+            if point is not None:
+                point = self._decorate_point_locked(point)
         if point is None:
             raise ValueError(f"map mask point not found: {point_id}")
         return point.to_dict()
@@ -108,6 +135,7 @@ class OfficialPearPalProvider:
             state = self._load_state
             error = self._load_error
             point_count = len(self._points)
+        user_status = self.get_user_status()
         return {
             "data_source": "pearpal-public",
             "labels_source": "pearpal-public",
@@ -120,7 +148,119 @@ class OfficialPearPalProvider:
             "anonymous": True,
             "world_id": _WORLD_ID,
             "map_name": _MAP_NAME,
+            **user_status,
         }
+
+    def start_login(self) -> dict[str, Any]:
+        if not self.enabled:
+            raise RuntimeError("OfficialPearPalProvider is disabled")
+        with self._lock:
+            if self._login_thread is not None:
+                return self.get_user_status()
+            self._auth_state = "opening-login"
+            self._auth_error = ""
+            if self._login_background:
+                thread = threading.Thread(
+                    target=self._login_and_refresh,
+                    name="map-mask-pearpal-login",
+                    daemon=True,
+                )
+                self._login_thread = thread
+            else:
+                thread = None
+        if thread is None:
+            self._login_and_refresh()
+        else:
+            thread.start()
+        return self.get_user_status()
+
+    def disconnect_user(self) -> dict[str, Any]:
+        with self._lock:
+            self._credentials = None
+            self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
+            self._auth_state = "anonymous"
+            self._auth_error = ""
+        return self.get_user_status()
+
+    def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
+        with self._lock:
+            self._hide_awarded = bool(hide_awarded)
+        return self.get_user_status()
+
+    def get_user_status(self) -> dict[str, Any]:
+        with self._lock:
+            credentials = self._credentials
+            awarded = self._awarded_state
+            matched_star = 0
+            matched_box = 0
+            for point in self._points:
+                source_id = str(point.detail.get("source_id") or "")
+                if point.label_id == _STAR_LABEL.id and source_id in awarded.star_ids:
+                    matched_star += 1
+                elif point.label_id == _BOX_LABEL.id and source_id in awarded.box_ids:
+                    matched_box += 1
+            return {
+                "auth_state": self._auth_state,
+                "authenticated": credentials is not None,
+                "anonymous": credentials is None,
+                "auth_error": self._auth_error,
+                "openid_masked": credentials.masked_openid if credentials else "",
+                "hide_awarded": self._hide_awarded,
+                "awarded_star_count": len(awarded.star_ids),
+                "awarded_box_count": len(awarded.box_ids),
+                "matched_awarded_star_count": matched_star,
+                "matched_awarded_box_count": matched_box,
+            }
+
+    def _login_and_refresh(self) -> None:
+        try:
+            credentials = self._login_launcher()
+            with self._lock:
+                self._auth_state = "loading-user-state"
+            awarded_state = self._user_client.fetch_awarded_state(credentials)
+        except PearPalLoginCancelled:
+            with self._lock:
+                self._auth_state = "cancelled"
+                self._auth_error = ""
+            return
+        except Exception as exc:  # noqa: BLE001
+            with self._lock:
+                self._auth_state = "error"
+                self._auth_error = str(exc)
+            logger.warning(
+                "failed to load PearPal user collection state: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return
+        finally:
+            with self._lock:
+                if self._login_thread is threading.current_thread():
+                    self._login_thread = None
+        with self._lock:
+            self._credentials = credentials
+            self._awarded_state = awarded_state
+            self._auth_state = "authenticated"
+            self._auth_error = ""
+        logger.info(
+            "loaded PearPal user collection state: "
+            f"star={len(awarded_state.star_ids)}, box={len(awarded_state.box_ids)}"
+        )
+
+    def _decorate_point_locked(self, point: MapMaskPoint) -> MapMaskPoint:
+        authenticated = self._credentials is not None
+        source_id = str(point.detail.get("source_id") or "")
+        awarded = False
+        if authenticated:
+            if point.label_id == _STAR_LABEL.id:
+                awarded = source_id in self._awarded_state.star_ids
+            elif point.label_id == _BOX_LABEL.id:
+                awarded = source_id in self._awarded_state.box_ids
+        detail = {
+            **point.detail,
+            "awarded": awarded,
+            "anonymous": not authenticated,
+        }
+        return replace(point, detail=detail)
 
     def _ensure_load_started(self) -> None:
         if not self.enabled:

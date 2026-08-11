@@ -210,6 +210,20 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
             raise ValueError("point_id is required")
         return map_mask_service.get_point_detail(point_id)
 
+    if method == "map_mask.get_user_status":
+        return map_mask_service.get_user_status()
+
+    if method == "map_mask.start_pearpal_login":
+        return map_mask_service.start_pearpal_login()
+
+    if method == "map_mask.disconnect_pearpal_user":
+        return map_mask_service.disconnect_pearpal_user()
+
+    if method == "map_mask.set_hide_awarded":
+        return map_mask_service.set_hide_awarded(
+            _coerce_bool(params.get("hide_awarded", True))
+        )
+
     if method == "map_mask.set_enabled":
         return map_mask_service.set_enabled(_coerce_bool(params.get("enabled", True)))
 
