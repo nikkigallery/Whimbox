@@ -323,6 +323,40 @@ class PearPalUserStateTests(unittest.TestCase):
         provider.disconnect_user()
         self.assertEqual(len(provider.list_points()), 3)
 
+    def test_decorated_points_are_cached_until_user_state_changes(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+            user_client=FakePearPalUserClient(),
+            login_launcher=lambda: credentials,
+            login_background=False,
+        )
+        provider.list_labels()
+
+        with patch.object(
+            provider,
+            "_decorate_point_locked",
+            wraps=provider._decorate_point_locked,
+        ) as decorate_point:
+            provider.list_points()
+            provider.list_points()
+            provider.get_user_status()
+            self.assertEqual(decorate_point.call_count, 3)
+
+            provider.start_login()
+            provider.list_points()
+            provider.get_user_status()
+            self.assertEqual(decorate_point.call_count, 6)
+
+            provider.disconnect_user()
+            provider.list_points()
+            self.assertEqual(decorate_point.call_count, 9)
+
     def test_auto_refresh_manual_refresh_and_failure_backoff(self) -> None:
         credentials = PearPalCredentials(
             token="abcDEF0123456789",
@@ -715,20 +749,27 @@ class VisiblePointsTests(unittest.TestCase):
                 service = MapMaskService()
                 service.provider = provider
                 service.fallback_provider = provider
-                enabled = service.get_visible_points(
-                    viewport=viewport(),
-                    label_ids=["pearpal_10"],
-                )
-                disabled = service.get_visible_points(
-                    viewport=viewport(),
-                    label_ids=[],
-                )
+                with patch.object(
+                    provider,
+                    "list_points",
+                    wraps=provider.list_points,
+                ) as list_points:
+                    enabled = service.get_visible_points(
+                        viewport=viewport(),
+                        label_ids=["pearpal_10"],
+                    )
+                    disabled = service.get_visible_points(
+                        viewport=viewport(),
+                        label_ids=[],
+                    )
 
         self.assertEqual(
             [point["id"] for point in enabled["points"]],
             ["pearpal_test"],
         )
         self.assertEqual(disabled["points"], [])
+        self.assertEqual(list_points.call_count, 2)
+        self.assertEqual(enabled["state"]["nearest_loaded_point_id"], "")
 
 
 if __name__ == "__main__":

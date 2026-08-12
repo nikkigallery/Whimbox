@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import threading
 import time
 from typing import Any
@@ -310,11 +309,6 @@ class MapMaskService:
         viewport_source = self._get_viewport_source(viewport_result, bigmap_state.is_bigmap_open)
         active_viewport = raw_viewport if bigmap_state.is_bigmap_open else None
         has_valid_viewport = active_viewport is not None
-        nearest_point = self._nearest_loaded_point(
-            active_viewport,
-            viewport_result,
-            selected_label_ids,
-        )
         state = MapMaskState(
             enabled=self.enabled,
             is_map_open=self.enabled and bigmap_state.is_bigmap_open and has_valid_viewport,
@@ -351,7 +345,6 @@ class MapMaskService:
             center_correction_offset_x=viewport_result.center_correction_offset_x,
             center_correction_offset_y=viewport_result.center_correction_offset_y,
             center_correction_source=viewport_result.center_correction_source,
-            **nearest_point,
             pending_center_x=viewport_result.pending_center_x,
             pending_center_y=viewport_result.pending_center_y,
             center_jump_distance=viewport_result.center_jump_distance,
@@ -449,111 +442,6 @@ class MapMaskService:
         if not is_bigmap_open:
             return "bigmap-closed"
         return viewport_result.source if viewport_result.viewport is not None else "none"
-
-    def _nearest_loaded_point(
-        self,
-        viewport: MapMaskViewport | None,
-        viewport_result: ViewportResult,
-        selected_label_ids: list[str],
-    ) -> dict[str, Any]:
-        empty = {
-            "nearest_loaded_point_id": "",
-            "nearest_loaded_point_name": "",
-            "nearest_loaded_point_image_x": None,
-            "nearest_loaded_point_image_y": None,
-            "nearest_loaded_point_distance": None,
-            "nearest_loaded_point_delta_image_x": None,
-            "nearest_loaded_point_delta_image_y": None,
-            "nearest_loaded_point_delta_screen_x": None,
-            "nearest_loaded_point_delta_screen_y": None,
-            "nearest_loaded_point_label_id": "",
-            "nearest_loaded_point_label_exists": False,
-            "nearest_loaded_point_label_enabled": False,
-            "nearest_loaded_point_final_visible": False,
-            "nearest_loaded_point_invisible_reason": "no_valid_viewport",
-        }
-        if viewport is None:
-            return empty
-        center_x = (
-            viewport_result.corrected_center_x
-            if viewport_result.corrected_center_x is not None
-            else viewport.image_left + viewport.image_width / 2
-        )
-        center_y = (
-            viewport_result.corrected_center_y
-            if viewport_result.corrected_center_y is not None
-            else viewport.image_top + viewport.image_height / 2
-        )
-        try:
-            points = self._list_points(map_name=viewport.map_name)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"failed to inspect nearest map-mask point: {exc}")
-            return empty
-        if not points:
-            return empty
-        nearest = min(
-            points,
-            key=lambda point: math.hypot(
-                point.image_x - center_x,
-                point.image_y - center_y,
-            ),
-        )
-        labels_by_id = {label.id: label for label in self._list_labels()}
-        label_exists = nearest.label_id in labels_by_id
-        label_enabled = nearest.label_id in set(selected_label_ids)
-        projected = point_to_visible(nearest, viewport)
-        final_visible = bool(label_exists and label_enabled and projected is not None)
-        if not label_exists:
-            invisible_reason = "label_not_registered"
-        elif not label_enabled:
-            invisible_reason = "label_not_enabled"
-        elif projected is None:
-            invisible_reason = "outside_viewport"
-        else:
-            invisible_reason = ""
-        point_screen_x = (
-            viewport.screen_left
-            + (nearest.image_x - viewport.image_left)
-            / viewport.image_width
-            * viewport.screen_width
-        )
-        point_screen_y = (
-            viewport.screen_top
-            + (nearest.image_y - viewport.image_top)
-            / viewport.image_height
-            * viewport.screen_height
-        )
-        screen_center_x = viewport.screen_left + viewport.screen_width / 2
-        screen_center_y = viewport.screen_top + viewport.screen_height / 2
-        accepted_x = (
-            viewport_result.accepted_center_x
-            if viewport_result.accepted_center_x is not None
-            else center_x
-        )
-        accepted_y = (
-            viewport_result.accepted_center_y
-            if viewport_result.accepted_center_y is not None
-            else center_y
-        )
-        return {
-            "nearest_loaded_point_id": nearest.id,
-            "nearest_loaded_point_name": nearest.name,
-            "nearest_loaded_point_image_x": nearest.image_x,
-            "nearest_loaded_point_image_y": nearest.image_y,
-            "nearest_loaded_point_distance": math.hypot(
-                nearest.image_x - center_x,
-                nearest.image_y - center_y,
-            ),
-            "nearest_loaded_point_delta_image_x": nearest.image_x - accepted_x,
-            "nearest_loaded_point_delta_image_y": nearest.image_y - accepted_y,
-            "nearest_loaded_point_delta_screen_x": point_screen_x - screen_center_x,
-            "nearest_loaded_point_delta_screen_y": point_screen_y - screen_center_y,
-            "nearest_loaded_point_label_id": nearest.label_id,
-            "nearest_loaded_point_label_exists": label_exists,
-            "nearest_loaded_point_label_enabled": label_enabled,
-            "nearest_loaded_point_final_visible": final_visible,
-            "nearest_loaded_point_invisible_reason": invisible_reason,
-        }
 
     def _get_data_status(self) -> dict[str, Any]:
         if hasattr(self.provider, "get_data_status"):

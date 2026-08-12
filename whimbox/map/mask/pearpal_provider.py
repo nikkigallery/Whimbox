@@ -105,6 +105,9 @@ class OfficialPearPalProvider:
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
         self._point_by_id: dict[str, MapMaskPoint] = {}
+        self._decorated_points_cache: tuple[MapMaskPoint, ...] | None = None
+        self._decorated_point_by_id_cache: dict[str, MapMaskPoint] = {}
+        self._matched_awarded_counts_cache = (0, 0, 0)
         self._credentials: PearPalCredentials | None = None
         self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
         self._auth_state = "anonymous"
@@ -135,7 +138,7 @@ class OfficialPearPalProvider:
         if map_name and map_name != _MAP_NAME:
             return []
         with self._lock:
-            points = [self._decorate_point_locked(point) for point in self._points]
+            points = list(self._get_decorated_points_locked())
             hide_awarded = self._hide_awarded and self._credentials is not None
         if hide_awarded:
             points = [
@@ -149,9 +152,8 @@ class OfficialPearPalProvider:
     def get_point_detail(self, point_id: str) -> dict[str, Any]:
         self._ensure_load_started()
         with self._lock:
-            point = self._point_by_id.get(str(point_id))
-            if point is not None:
-                point = self._decorate_point_locked(point)
+            self._get_decorated_points_locked()
+            point = self._decorated_point_by_id_cache.get(str(point_id))
         if point is None:
             raise ValueError(f"map mask point not found: {point_id}")
         return point.to_dict()
@@ -204,6 +206,7 @@ class OfficialPearPalProvider:
         with self._lock:
             self._credentials = None
             self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
+            self._invalidate_decorated_points_locked()
             self._auth_state = "anonymous"
             self._auth_error = ""
             self._refreshing = False
@@ -324,6 +327,7 @@ class OfficialPearPalProvider:
                 if self._credentials == credentials:
                     now = time.monotonic()
                     self._awarded_state = awarded_state
+                    self._invalidate_decorated_points_locked()
                     self._refreshing = False
                     self._refresh_error = ""
                     self._refresh_failure_count = 0
@@ -355,26 +359,10 @@ class OfficialPearPalProvider:
         with self._lock:
             credentials = self._credentials
             awarded = self._awarded_state
-            matched_star = 0
-            matched_dewdrop = 0
-            matched_box = 0
-            for point in self._points:
-                source_id = str(point.detail.get("source_id") or "")
-                if (
-                    point.label_id == _STAR_LABEL.id
-                    and source_id in awarded.star_ids
-                ):
-                    matched_star += 1
-                elif (
-                    point.label_id == _DEWDROP_LABEL.id
-                    and source_id in awarded.dewdrop_ids
-                ):
-                    matched_dewdrop += 1
-                elif (
-                    point.label_id == _BOX_LABEL.id
-                    and source_id in awarded.box_ids
-                ):
-                    matched_box += 1
+            self._get_decorated_points_locked()
+            matched_star, matched_dewdrop, matched_box = (
+                self._matched_awarded_counts_cache
+            )
             next_refresh_in_seconds = 0.0
             if credentials is not None and self._next_refresh_monotonic > 0.0:
                 next_refresh_in_seconds = max(
@@ -431,6 +419,7 @@ class OfficialPearPalProvider:
         with self._lock:
             self._credentials = credentials
             self._awarded_state = awarded_state
+            self._invalidate_decorated_points_locked()
             self._auth_state = "authenticated"
             self._auth_error = ""
             self._refreshing = False
@@ -471,6 +460,41 @@ class OfficialPearPalProvider:
         }
         return replace(point, detail=detail)
 
+    def _invalidate_decorated_points_locked(self) -> None:
+        self._decorated_points_cache = None
+        self._decorated_point_by_id_cache = {}
+        self._matched_awarded_counts_cache = (0, 0, 0)
+
+    def _get_decorated_points_locked(self) -> tuple[MapMaskPoint, ...]:
+        cached = self._decorated_points_cache
+        if cached is not None:
+            return cached
+
+        decorated = tuple(
+            self._decorate_point_locked(point) for point in self._points
+        )
+        matched_star = 0
+        matched_dewdrop = 0
+        matched_box = 0
+        for point in decorated:
+            if not bool(point.detail.get("awarded")):
+                continue
+            if point.label_id == _STAR_LABEL.id:
+                matched_star += 1
+            elif point.label_id == _DEWDROP_LABEL.id:
+                matched_dewdrop += 1
+            elif point.label_id == _BOX_LABEL.id:
+                matched_box += 1
+
+        self._decorated_points_cache = decorated
+        self._decorated_point_by_id_cache = {point.id: point for point in decorated}
+        self._matched_awarded_counts_cache = (
+            matched_star,
+            matched_dewdrop,
+            matched_box,
+        )
+        return decorated
+
     def _ensure_load_started(self) -> None:
         if not self.enabled:
             raise RuntimeError("OfficialPearPalProvider is disabled")
@@ -500,6 +524,7 @@ class OfficialPearPalProvider:
         with self._lock:
             self._points = tuple(point_by_id.values())
             self._point_by_id = point_by_id
+            self._invalidate_decorated_points_locked()
             self._load_state = "ready"
             self._load_error = ""
         star_count = sum(point.label_id == _STAR_LABEL.id for point in points)
