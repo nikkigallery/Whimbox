@@ -173,6 +173,78 @@ def handle_background_method(method: str, params: Dict[str, Any]) -> Any:
     return UNHANDLED
 
 
+def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
+    if not method.startswith("map_mask."):
+        return UNHANDLED
+
+    if method == "map_mask.get_game_window_state":
+        from whimbox.common.handle_lib import HANDLE_OBJ
+
+        if not HANDLE_OBJ.is_alive():
+            HANDLE_OBJ.refresh_handle()
+
+        found = bool(HANDLE_OBJ.is_alive())
+        physical_x, physical_y, physical_width, physical_height = (
+            HANDLE_OBJ.get_window_rect() if found else (0, 0, 0, 0)
+        )
+        scale_factor = HANDLE_OBJ.get_window_scale_factor() if found else 1.0
+        if scale_factor <= 0:
+            scale_factor = 1.0
+        x = round(physical_x / scale_factor)
+        y = round(physical_y / scale_factor)
+        width = round(physical_width / scale_factor)
+        height = round(physical_height / scale_factor)
+        return {
+            "found": found,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "isForeground": HANDLE_OBJ.is_foreground() if found else False,
+            "isMinimized": bool(HANDLE_OBJ.is_minimized()) if found else False,
+        }
+
+    from whimbox.map.mask.service import map_mask_service
+
+    if method == "map_mask.get_labels":
+        return {
+            "labels": map_mask_service.get_labels(),
+            "selected_label_ids": map_mask_service.get_selected_label_ids(),
+        }
+
+    if method == "map_mask.set_selected_labels":
+        label_ids = params.get("selected_label_ids", params.get("label_ids", []))
+        if not isinstance(label_ids, list):
+            raise ValueError("selected_label_ids must be a list")
+        return map_mask_service.set_selected_label_ids([str(item) for item in label_ids])
+
+    if method == "map_mask.get_visible_points":
+        return map_mask_service.get_visible_points(
+            viewport=_parse_map_mask_viewport(params.get("viewport")),
+            map_name=_parse_optional_string(params.get("map_name")),
+            label_ids=_parse_optional_string_list(params.get("label_ids")),
+        )
+
+    if method == "map_mask.get_user_status":
+        return map_mask_service.get_user_status()
+
+    if method == "map_mask.start_pearpal_login":
+        return map_mask_service.start_pearpal_login()
+
+    if method == "map_mask.refresh_pearpal_user_state":
+        return map_mask_service.refresh_pearpal_user_state()
+
+    if method == "map_mask.disconnect_pearpal_user":
+        return map_mask_service.disconnect_pearpal_user()
+
+    if method == "map_mask.set_hide_awarded":
+        return map_mask_service.set_hide_awarded(
+            _coerce_bool(params.get("hide_awarded", True))
+        )
+
+    return UNHANDLED
+
+
 async def handle_weixin_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "weixin.login.start":
         return await weixin_service.start_login()
@@ -193,6 +265,31 @@ async def handle_weixin_method(method: str, params: Dict[str, Any]) -> Any:
         return await weixin_service.disconnect()
 
     return UNHANDLED
+
+
+def _parse_map_mask_viewport(value: Any):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("viewport must be an object")
+    from whimbox.map.mask.models import MapMaskViewport
+
+    return MapMaskViewport.from_dict(value)
+
+
+def _parse_optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_optional_string_list(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("label_ids must be a list")
+    return [str(item) for item in value]
 
 
 def _load_setting_options() -> Dict[str, Any]:

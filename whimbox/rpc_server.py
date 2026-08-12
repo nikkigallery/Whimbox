@@ -18,6 +18,7 @@ from whimbox.rpc_method_groups import (
     UNHANDLED,
     handle_background_method,
     handle_config_method,
+    handle_map_mask_method,
     handle_script_method,
     handle_weixin_method,
 )
@@ -876,6 +877,10 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
     if result is not UNHANDLED:
         return result
 
+    result = handle_map_mask_method(method, params)
+    if result is not UNHANDLED:
+        return result
+
     result = await handle_weixin_method(method, params)
     if result is not UNHANDLED:
         return result
@@ -960,4 +965,3 @@ async def start_rpc_server():
     _start_overlay_hotkey_listener()
     async with websockets.serve(_ws_handler, host, port, max_size=10 * 1024 * 1024):
         await asyncio.Future()
-

@@ -157,6 +157,18 @@ class ProcessHandler:
             return True, width, height
         return False, width, height
 
+    def get_window_rect(self) -> tuple[int, int, int, int]:
+        """Return the client-area bounds as (x, y, width, height)."""
+        if not self.is_alive():
+            return 0, 0, 0, 0
+        return self._mgr.get_window_rect(self._native_handle, self.pid)
+
+    def get_window_scale_factor(self) -> float:
+        """Return the native-pixel to logical-coordinate scale factor."""
+        if not self.is_alive():
+            return 1.0
+        return self._mgr.get_window_scale_factor(self._native_handle, self.pid)
+
 
 HANDLE_OBJ = ProcessHandler(get_path_manager().get_process_name())
 
