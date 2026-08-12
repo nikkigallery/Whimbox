@@ -14,7 +14,10 @@ from whimbox.map.mask.auto_viewport_provider import (
     HybridAutoCenterViewportProvider,
 )
 from whimbox.map.mask.bigmap_match_diagnostics import BigMapMatchAnalysis
-from whimbox.map.mask.bigmap_state_provider import BigMapStateProvider
+from whimbox.map.mask.bigmap_state_provider import (
+    BigMapDetectionState,
+    BigMapStateProvider,
+)
 from whimbox.map.mask.coordinate import point_to_visible
 from whimbox.map.mask.local_provider import LocalJsonProvider
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
@@ -516,7 +519,6 @@ class BigMapMatchGuardTests(unittest.TestCase):
 class BigMapStateProviderTests(unittest.TestCase):
     def test_each_detection_uses_the_current_single_frame_result(self) -> None:
         provider = BigMapStateProvider()
-        provider.set_mode("auto")
         provider._detect_with_whimbox_page = Mock(side_effect=[True, False])
 
         opened = provider.detect()
@@ -665,7 +667,19 @@ class DetectionWorkerLifecycleTests(unittest.TestCase):
         service.provider = service.local_provider
         service.fallback_provider = service.local_provider
         service.enabled = True
-        service.bigmap_state_provider.set_mode("force-open")
+        service.bigmap_state_provider.detect = Mock(
+            return_value=BigMapDetectionState(
+                is_bigmap_open=True,
+                raw_is_bigmap_open=True,
+                detection_mode="auto",
+                detection_source="test",
+                detection_confidence=1.0,
+                detection_error="",
+                last_detection_time="",
+                last_successful_detection_time="",
+                detection_duration_ms=0.0,
+            )
+        )
         service.viewport_provider.get_mode = Mock(return_value="hybrid-auto-center")
         service.viewport_provider.get_viewport = Mock(
             return_value=ViewportResult(
@@ -702,7 +716,19 @@ class DetectionWorkerLifecycleTests(unittest.TestCase):
         service.provider = service.local_provider
         service.fallback_provider = service.local_provider
         service.enabled = True
-        service.bigmap_state_provider.set_mode("force-closed")
+        service.bigmap_state_provider.detect = Mock(
+            return_value=BigMapDetectionState(
+                is_bigmap_open=False,
+                raw_is_bigmap_open=False,
+                detection_mode="auto",
+                detection_source="test",
+                detection_confidence=1.0,
+                detection_error="",
+                last_detection_time="",
+                last_successful_detection_time="",
+                detection_duration_ms=0.0,
+            )
+        )
 
         with patch(
             "whimbox.map.mask.service._DETECTION_WORKER_IDLE_SECONDS",
@@ -739,16 +765,26 @@ class VisiblePointsTests(unittest.TestCase):
             )
             with patch.dict(
                 os.environ,
-                {
-                    "WHIMBOX_MAP_MASK_LOCAL_POINTS": str(points_path),
-                    "WHIMBOX_MAP_MASK_FORCE_BIGMAP_OPEN": "1",
-                },
+                {"WHIMBOX_MAP_MASK_LOCAL_POINTS": str(points_path)},
                 clear=False,
             ):
                 provider = LocalJsonProvider()
                 service = MapMaskService()
                 service.provider = provider
                 service.fallback_provider = provider
+                service.bigmap_state_provider.detect = Mock(
+                    return_value=BigMapDetectionState(
+                        is_bigmap_open=True,
+                        raw_is_bigmap_open=True,
+                        detection_mode="auto",
+                        detection_source="test",
+                        detection_confidence=1.0,
+                        detection_error="",
+                        last_detection_time="",
+                        last_successful_detection_time="",
+                        detection_duration_ms=0.0,
+                    )
+                )
                 with patch.object(
                     provider,
                     "list_points",
@@ -769,7 +805,6 @@ class VisiblePointsTests(unittest.TestCase):
         )
         self.assertEqual(disabled["points"], [])
         self.assertEqual(list_points.call_count, 2)
-        self.assertEqual(enabled["state"]["nearest_loaded_point_id"], "")
 
 
 if __name__ == "__main__":

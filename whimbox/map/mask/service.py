@@ -196,14 +196,6 @@ class MapMaskService:
                 self._detection_wake.set()
         return self.get_state()
 
-    def set_bigmap_detection_mode(self, mode: str) -> dict[str, Any]:
-        with self._detection_provider_lock:
-            self.bigmap_state_provider.set_mode(mode)
-        with self._detection_lock:
-            self._detection_snapshot = None
-            self._detection_wake.set()
-        return self.get_state()
-
     def get_labels(self) -> list[dict[str, Any]]:
         return [label.to_dict() for label in self._list_labels()]
 

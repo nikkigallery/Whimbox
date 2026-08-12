@@ -183,7 +183,6 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         if not HANDLE_OBJ.is_alive():
             HANDLE_OBJ.refresh_handle()
 
-        handle = HANDLE_OBJ.get_handle()
         found = bool(HANDLE_OBJ.is_alive())
         physical_x, physical_y, physical_width, physical_height = (
             HANDLE_OBJ.get_window_rect() if found else (0, 0, 0, 0)
@@ -195,52 +194,17 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         y = round(physical_y / scale_factor)
         width = round(physical_width / scale_factor)
         height = round(physical_height / scale_factor)
-        client_area_available = found and width > 0 and height > 0
-        client_rect = None
-        if client_area_available:
-            client_rect = {
-                "left": x,
-                "top": y,
-                "right": x + width,
-                "bottom": y + height,
-                "x": x,
-                "y": y,
-                "width": width,
-                "height": height,
-            }
-
         return {
             "found": found,
-            "matchedBy": "process",
-            "title": None,
-            "handle": str(handle) if found else None,
-            "processName": HANDLE_OBJ.process_name,
-            "pid": HANDLE_OBJ.pid if found else None,
             "x": x,
             "y": y,
             "width": width,
             "height": height,
-            "appliedBoundsSource": "client-area",
-            "clientAreaAvailable": client_area_available,
-            "clientX": x if client_area_available else None,
-            "clientY": y if client_area_available else None,
-            "clientWidth": width if client_area_available else None,
-            "clientHeight": height if client_area_available else None,
-            "windowRect": None,
-            "clientRect": client_rect,
-            "dpiScale": scale_factor,
-            "scaleFactor": scale_factor,
             "isForeground": HANDLE_OBJ.is_foreground() if found else False,
             "isMinimized": bool(HANDLE_OBJ.is_minimized()) if found else False,
         }
 
     from whimbox.map.mask.service import map_mask_service
-
-    if method == "map_mask.get_state":
-        return map_mask_service.get_state(
-            viewport=_parse_map_mask_viewport(params.get("viewport")),
-            map_name=_parse_optional_string(params.get("map_name")),
-        )
 
     if method == "map_mask.get_labels":
         return {
@@ -261,12 +225,6 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
             label_ids=_parse_optional_string_list(params.get("label_ids")),
         )
 
-    if method == "map_mask.get_point_detail":
-        point_id = _parse_optional_string(params.get("point_id"))
-        if not point_id:
-            raise ValueError("point_id is required")
-        return map_mask_service.get_point_detail(point_id)
-
     if method == "map_mask.get_user_status":
         return map_mask_service.get_user_status()
 
@@ -283,15 +241,6 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         return map_mask_service.set_hide_awarded(
             _coerce_bool(params.get("hide_awarded", True))
         )
-
-    if method == "map_mask.set_enabled":
-        return map_mask_service.set_enabled(_coerce_bool(params.get("enabled", True)))
-
-    if method == "map_mask.set_bigmap_detection_mode":
-        mode = _parse_optional_string(params.get("mode"))
-        if not mode:
-            raise ValueError("mode is required")
-        return map_mask_service.set_bigmap_detection_mode(mode)
 
     return UNHANDLED
 
