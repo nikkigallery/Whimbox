@@ -447,14 +447,14 @@ def _normalize_one_dragon_custom_step(step: Any) -> Dict[str, Any]:
     if not step_id:
         raise ValueError("custom step id is required")
     step_type = str(step.get("type") or "").strip()
-    if step_type not in ("path", "macro", "close_game"):
-        raise ValueError("custom step type must be one of: path, macro, close_game")
+    if step_type not in ("path", "macro"):
+        raise ValueError("custom step type must be one of: path, macro")
     script_name = str(step.get("script_name") or "").strip()
     return {
         "id": step_id,
         "enabled": _coerce_bool(step.get("enabled", True)),
         "type": step_type,
-        "script_name": script_name if step_type in ("path", "macro") else "",
+        "script_name": script_name,
     }
 
 
