@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whimbox"
-version = "2.5.6"
+version = "3.0.0"
 description = "奇想盒-AI游戏助手"
 readme = "README.md"
 requires-python = "==3.12.8"
