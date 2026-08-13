@@ -237,6 +237,9 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "map_mask.disconnect_pearpal_user":
         return map_mask_service.disconnect_pearpal_user()
 
+    if method == "map_mask.clear_pearpal_login":
+        return map_mask_service.clear_pearpal_login_information()
+
     if method == "map_mask.set_hide_awarded":
         return map_mask_service.set_hide_awarded(
             _coerce_bool(params.get("hide_awarded", True))

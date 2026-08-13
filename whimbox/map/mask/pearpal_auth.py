@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -198,6 +199,19 @@ def launch_login_webview() -> PearPalCredentials:
 def default_webview_storage_dir() -> Path:
     base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".whimbox")
     return base / "Whimbox" / "pearpal-webview"
+
+
+def clear_webview_login_storage() -> None:
+    storage_dir = default_webview_storage_dir()
+    if not storage_dir.exists():
+        return
+    try:
+        shutil.rmtree(storage_dir)
+    except OSError as exc:
+        raise PearPalAuthError(
+            "failed to clear PearPal login storage; "
+            "close the login window and try again"
+        ) from exc
 
 
 def _decode_id_set(value: Any, label: str) -> frozenset[str]:

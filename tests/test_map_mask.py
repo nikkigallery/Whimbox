@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -325,6 +326,69 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertFalse(star["detail"]["anonymous"])
         provider.disconnect_user()
         self.assertEqual(len(provider.list_points()), 3)
+
+    def test_clear_login_information_removes_session_and_webview_storage(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+            user_client=FakePearPalUserClient(),
+            login_launcher=lambda: credentials,
+            login_background=False,
+        )
+        provider.list_points()
+        self.assertTrue(provider.start_login()["authenticated"])
+
+        with patch(
+            "whimbox.map.mask.pearpal_provider.clear_webview_login_storage"
+        ) as clear_storage:
+            status = provider.clear_login_information()
+
+        clear_storage.assert_called_once_with()
+        self.assertFalse(status["authenticated"])
+        self.assertEqual(status["auth_state"], "anonymous")
+        self.assertEqual(len(provider.list_points()), 3)
+
+    def test_clear_login_information_invalidates_in_flight_login(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        login_started = threading.Event()
+        release_login = threading.Event()
+
+        def delayed_login() -> PearPalCredentials:
+            login_started.set()
+            release_login.wait(timeout=2.0)
+            return credentials
+
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakePearPalClient(),
+            background=False,
+            user_client=FakePearPalUserClient(),
+            login_launcher=delayed_login,
+            login_background=True,
+        )
+
+        provider.start_login()
+        self.assertTrue(login_started.wait(timeout=1.0))
+        with patch(
+            "whimbox.map.mask.pearpal_provider.clear_webview_login_storage"
+        ):
+            provider.clear_login_information()
+        release_login.set()
+        login_thread = provider._login_thread
+        if login_thread is not None:
+            login_thread.join(timeout=2.0)
+
+        status = provider.get_user_status()
+        self.assertFalse(status["authenticated"])
+        self.assertEqual(status["auth_state"], "anonymous")
 
     def test_decorated_points_are_cached_until_user_state_changes(self) -> None:
         credentials = PearPalCredentials(

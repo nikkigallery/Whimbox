@@ -13,6 +13,7 @@ from .pearpal_auth import (
     PearPalCredentials,
     PearPalLoginCancelled,
     PearPalUserClient,
+    clear_webview_login_storage,
     launch_login_webview,
 )
 from .models import MapMaskLabel, MapMaskPoint
@@ -109,6 +110,7 @@ class OfficialPearPalProvider:
         self._decorated_point_by_id_cache: dict[str, MapMaskPoint] = {}
         self._matched_awarded_counts_cache = (0, 0, 0)
         self._credentials: PearPalCredentials | None = None
+        self._auth_generation = 0
         self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
         self._auth_state = "anonymous"
         self._auth_error = ""
@@ -185,11 +187,13 @@ class OfficialPearPalProvider:
         with self._lock:
             if self._login_thread is not None:
                 return self.get_user_status()
+            auth_generation = self._auth_generation
             self._auth_state = "opening-login"
             self._auth_error = ""
             if self._login_background:
                 thread = threading.Thread(
                     target=self._login_and_refresh,
+                    args=(auth_generation,),
                     name="map-mask-pearpal-login",
                     daemon=True,
                 )
@@ -197,29 +201,22 @@ class OfficialPearPalProvider:
             else:
                 thread = None
         if thread is None:
-            self._login_and_refresh()
+            self._login_and_refresh(auth_generation)
         else:
             thread.start()
         return self.get_user_status()
 
     def disconnect_user(self) -> dict[str, Any]:
         with self._lock:
-            self._credentials = None
-            self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
-            self._invalidate_decorated_points_locked()
-            self._auth_state = "anonymous"
-            self._auth_error = ""
-            self._refreshing = False
-            self._refresh_error = ""
-            self._refresh_failure_count = 0
-            self._refresh_reason = ""
-            self._last_refresh_at = ""
-            self._last_refresh_reason = ""
-            self._last_refresh_monotonic = 0.0
-            self._next_refresh_monotonic = 0.0
-            self._overlay_bigmap_open = False
-            # An in-flight request cannot be cancelled, but its credential
-            # identity check prevents it from restoring disconnected state.
+            self._auth_generation += 1
+            self._reset_user_state_locked()
+        return self.get_user_status()
+
+    def clear_login_information(self) -> dict[str, Any]:
+        with self._lock:
+            self._auth_generation += 1
+            self._reset_user_state_locked()
+        clear_webview_login_storage()
         return self.get_user_status()
 
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
@@ -276,10 +273,11 @@ class OfficialPearPalProvider:
             self._refreshing = True
             self._refresh_error = ""
             self._refresh_reason = reason
+            auth_generation = self._auth_generation
             if self._refresh_background:
                 thread = threading.Thread(
                     target=self._refresh_user_state,
-                    args=(credentials, reason),
+                    args=(credentials, reason, auth_generation),
                     name="map-mask-pearpal-user-refresh",
                     daemon=True,
                 )
@@ -287,7 +285,7 @@ class OfficialPearPalProvider:
             else:
                 thread = None
         if thread is None:
-            self._refresh_user_state(credentials, reason)
+            self._refresh_user_state(credentials, reason, auth_generation)
         else:
             thread.start()
         return True
@@ -296,13 +294,17 @@ class OfficialPearPalProvider:
         self,
         credentials: PearPalCredentials,
         reason: str,
+        auth_generation: int,
     ) -> None:
         try:
             awarded_state = self._user_client.fetch_awarded_state(credentials)
         except Exception as exc:  # noqa: BLE001
             should_log = False
             with self._lock:
-                if self._credentials == credentials:
+                if (
+                    self._auth_generation == auth_generation
+                    and self._credentials == credentials
+                ):
                     self._refreshing = False
                     self._refresh_error = str(exc)
                     self._refresh_reason = ""
@@ -324,7 +326,10 @@ class OfficialPearPalProvider:
         else:
             refreshed = False
             with self._lock:
-                if self._credentials == credentials:
+                if (
+                    self._auth_generation == auth_generation
+                    and self._credentials == credentials
+                ):
                     now = time.monotonic()
                     self._awarded_state = awarded_state
                     self._invalidate_decorated_points_locked()
@@ -391,25 +396,31 @@ class OfficialPearPalProvider:
                 "matched_awarded_box_count": matched_box,
             }
 
-    def _login_and_refresh(self) -> None:
+    def _login_and_refresh(self, auth_generation: int) -> None:
         try:
             credentials = self._login_launcher()
             with self._lock:
+                if self._auth_generation != auth_generation:
+                    return
                 self._auth_state = "loading-user-state"
             awarded_state = self._user_client.fetch_awarded_state(credentials)
         except PearPalLoginCancelled:
             with self._lock:
-                self._auth_state = "cancelled"
-                self._auth_error = ""
+                if self._auth_generation == auth_generation:
+                    self._auth_state = "cancelled"
+                    self._auth_error = ""
             return
         except Exception as exc:  # noqa: BLE001
             with self._lock:
-                self._auth_state = "error"
-                self._auth_error = str(exc)
-            logger.warning(
-                "failed to load PearPal user collection state: "
-                f"{type(exc).__name__}: {exc}"
-            )
+                is_current_login = self._auth_generation == auth_generation
+                if is_current_login:
+                    self._auth_state = "error"
+                    self._auth_error = str(exc)
+            if is_current_login:
+                logger.warning(
+                    "failed to load PearPal user collection state: "
+                    f"{type(exc).__name__}: {exc}"
+                )
             return
         finally:
             with self._lock:
@@ -417,6 +428,8 @@ class OfficialPearPalProvider:
                     self._login_thread = None
         now = time.monotonic()
         with self._lock:
+            if self._auth_generation != auth_generation:
+                return
             self._credentials = credentials
             self._awarded_state = awarded_state
             self._invalidate_decorated_points_locked()
@@ -441,6 +454,22 @@ class OfficialPearPalProvider:
             f"dewdrop={len(awarded_state.dewdrop_ids)}, "
             f"box={len(awarded_state.box_ids)}"
         )
+
+    def _reset_user_state_locked(self) -> None:
+        self._credentials = None
+        self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
+        self._invalidate_decorated_points_locked()
+        self._auth_state = "anonymous"
+        self._auth_error = ""
+        self._refreshing = False
+        self._refresh_error = ""
+        self._refresh_failure_count = 0
+        self._refresh_reason = ""
+        self._last_refresh_at = ""
+        self._last_refresh_reason = ""
+        self._last_refresh_monotonic = 0.0
+        self._next_refresh_monotonic = 0.0
+        self._overlay_bigmap_open = False
 
     def _decorate_point_locked(self, point: MapMaskPoint) -> MapMaskPoint:
         authenticated = self._credentials is not None

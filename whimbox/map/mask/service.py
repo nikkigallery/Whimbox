@@ -257,6 +257,9 @@ class MapMaskService:
     def disconnect_pearpal_user(self) -> dict[str, Any]:
         return self.official_provider.disconnect_user()
 
+    def clear_pearpal_login_information(self) -> dict[str, Any]:
+        return self.official_provider.clear_login_information()
+
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
         return self.official_provider.set_hide_awarded(hide_awarded)
 
