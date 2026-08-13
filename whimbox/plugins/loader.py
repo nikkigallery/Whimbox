@@ -89,7 +89,8 @@ def load_plugins(
                         name=tool_meta.get("name"),
                         description=tool_meta.get("description", ""),
                         plugin_id=meta.get("id", ""),
-                        permissions=meta.get("permissions", []),
+                        permissions=tool_meta.get("permissions", meta.get("permissions", [])),
+                        ui_behavior=tool_meta.get("ui_behavior", meta.get("ui_behavior", "")),
                     )
             loaded.append(meta)
         except (PluginLoadError, ToolRegistryError) as exc:

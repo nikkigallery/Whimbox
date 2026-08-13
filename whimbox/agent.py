@@ -233,7 +233,7 @@ class Agent:
                     self._tool_running_sessions.add(session_id)
                     self._current_tool_by_session[session_id] = tool_name
                     if status_callback:
-                        status_callback("on_tool_start", tool_name, None)
+                        status_callback("on_tool_start", tool_name, event.get("metadata"))
 
                 elif event_type == "on_tool_end":
                     active_tool_calls = max(0, active_tool_calls - 1)

@@ -19,6 +19,7 @@ class ToolSpec:
     func: Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
     plugin_id: str
     permissions: List[str]
+    ui_behavior: str
 
 
 class PluginRegistry:
@@ -48,11 +49,16 @@ class PluginRegistry:
         description: str = "",
         plugin_id: str = "",
         permissions: Optional[List[str]] = None,
+        ui_behavior: str = "",
     ) -> None:
         if tool_id in self._tools:
             raise ToolRegistryError(f"tool already registered: {tool_id}")
         if not plugin_id:
             raise ToolRegistryError("plugin_id is required")
+        resolved_permissions = permissions or []
+        resolved_ui_behavior = ui_behavior or _resolve_ui_behavior(resolved_permissions)
+        if resolved_ui_behavior not in {"silent", "game_overlay"}:
+            raise ToolRegistryError(f"invalid ui_behavior: {resolved_ui_behavior}")
         tool_spec = ToolSpec(
             tool_id=tool_id,
             name=name or tool_id,
@@ -61,7 +67,8 @@ class PluginRegistry:
             output_schema=output_schema or {},
             func=func,
             plugin_id=plugin_id,
-            permissions=permissions or [],
+            permissions=resolved_permissions,
+            ui_behavior=resolved_ui_behavior,
         )
         self._tools[tool_id] = tool_spec
 
@@ -77,9 +84,20 @@ class PluginRegistry:
                     "output_schema": spec.output_schema,
                     "plugin_id": spec.plugin_id,
                     "permissions": spec.permissions,
+                    "ui_behavior": spec.ui_behavior,
                 }
             )
         return items
+
+    def get_tool_metadata(self, tool_id: str) -> Dict[str, Any]:
+        spec = self._tools.get(tool_id)
+        if spec is None:
+            return {}
+        return {
+            "tool_id": spec.tool_id,
+            "permissions": list(spec.permissions),
+            "ui_behavior": spec.ui_behavior,
+        }
 
     def invoke(
         self,
@@ -129,4 +147,8 @@ def _resolve_resource_group(permissions: List[str]) -> str:
     if "screen" in values or "input" in values:
         return "game_runtime"
     return "default"
+
+
+def _resolve_ui_behavior(permissions: List[str]) -> str:
+    return "game_overlay" if _resolve_resource_group(permissions) == "game_runtime" else "silent"
 

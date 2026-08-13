@@ -56,6 +56,7 @@ def build_tools(
 
         name = tool_meta.get("name") or tool_id
         description = tool_meta.get("description") or ""
+        ui_behavior = tool_meta.get("ui_behavior") or "silent"
         input_schema = tool_meta.get("input_schema") or {}
         model_name = f"Args_{tool_id.replace('.', '_')}"
         args_schema = _build_args_schema(input_schema, model_name)
@@ -88,6 +89,7 @@ def build_tools(
                 name=name,
                 description=description,
                 args_schema=args_schema,
+                metadata={"tool_id": tool_id, "ui_behavior": ui_behavior},
             )
         )
     return tools

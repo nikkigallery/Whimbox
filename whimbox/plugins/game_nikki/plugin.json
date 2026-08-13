@@ -69,6 +69,8 @@
       "id": "nikki.search_path",
       "name": "搜索跑图路线或宏",
       "description": "根据脚本名称或素材名称搜索候选脚本。搜索路线时支持 name/target，搜索宏时支持 name。返回候选后，需用户确认具体路线名或宏名，再调用对应运行工具。",
+      "permissions": [],
+      "ui_behavior": "silent",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -150,6 +152,8 @@
       "id": "nikki.open_path_folder",
       "name": "打开脚本文件夹",
       "description": "打开存放脚本的文件夹",
+      "permissions": [],
+      "ui_behavior": "silent",
       "input_schema": { "type": "object", "properties": {}, "required": [] },
       "output_schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" } } }
     },

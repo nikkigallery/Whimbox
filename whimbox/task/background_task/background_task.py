@@ -299,15 +299,20 @@ class BackgroundTask:
         detail: str = "",
         result: dict | None = None,
         error: str = "",
+        ui_behavior: str | None = None,
     ):
         from whimbox.rpc_server import notify_event
 
+        resolved_ui_behavior = ui_behavior or (
+            "silent" if tool_id == "background.auto_dialogue" else "game_overlay"
+        )
         payload = {
             "session_id": session_id,
             "run_id": f"background:{session_id}:{tool_id}",
             "source": "background",
             "phase": phase,
             "tool_id": tool_id,
+            "ui_behavior": resolved_ui_behavior,
         }
         if detail:
             payload["detail"] = detail
@@ -555,6 +560,7 @@ class BackgroundTask:
             phase="started",
             tool_id=tool_id,
             detail="auto_dialogue",
+            ui_behavior="silent",
         )
         try:
             # self.log_to_gui("检测到对话界面，开始自动对话", type="add_ai_message")

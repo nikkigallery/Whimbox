@@ -37,6 +37,7 @@ _agent_stopping_sessions: Set[str] = set()
 _task_stopping_run_ids: Set[str] = set()
 _agent_active_tool_call_ids: Dict[str, str] = {}
 _agent_pending_tool_call_ids: Dict[str, deque[str]] = {}
+_agent_tool_metadata: Dict[str, Dict[str, str]] = {}
 _one_dragon_auto_start_scheduled = False
 
 
@@ -102,6 +103,7 @@ def _notify_run_status(
     tool_call_id: str = "",
     result: Optional[Dict[str, Any]] = None,
     error: str = "",
+    ui_behavior: str = "",
 ) -> None:
     payload: Dict[str, Any] = {
         "session_id": session_id or "default",
@@ -121,6 +123,8 @@ def _notify_run_status(
         payload["result"] = result
     if error:
         payload["error"] = error
+    if ui_behavior:
+        payload["ui_behavior"] = ui_behavior
     _notify("event.run.status", payload)
 
 
@@ -149,7 +153,10 @@ def _notify_run_log(
     _notify("event.run.log", payload)
 
 
-def _bind_agent_tool_call_id(session_id: str) -> str:
+def _bind_agent_tool_call_id(
+    session_id: str,
+    tool_meta: Optional[Dict[str, Any]] = None,
+) -> str:
     sid = session_id or "default"
     tool_call_id = f"tool_{uuid4().hex}"
     queue = _agent_pending_tool_call_ids.get(sid)
@@ -157,7 +164,16 @@ def _bind_agent_tool_call_id(session_id: str) -> str:
         queue = deque()
         _agent_pending_tool_call_ids[sid] = queue
     queue.append(tool_call_id)
+    resolved_meta = tool_meta if isinstance(tool_meta, dict) else {}
+    _agent_tool_metadata[tool_call_id] = {
+        "tool_id": str(resolved_meta.get("tool_id") or ""),
+        "ui_behavior": str(resolved_meta.get("ui_behavior") or "silent"),
+    }
     return tool_call_id
+
+
+def _get_agent_tool_metadata(tool_call_id: str) -> Dict[str, str]:
+    return _agent_tool_metadata.get(tool_call_id, {})
 
 
 def _resolve_agent_tool_call_id(session_id: str, *, activate_pending: bool = False) -> str:
@@ -187,13 +203,20 @@ def _complete_agent_tool_call_id(session_id: str) -> str:
             queue.remove(tool_call_id)
         if not queue:
             _agent_pending_tool_call_ids.pop(sid, None)
+    if tool_call_id:
+        _agent_tool_metadata.pop(tool_call_id, None)
     return tool_call_id
 
 
 def _clear_agent_tool_call_id(session_id: str) -> None:
     sid = session_id or "default"
-    _agent_active_tool_call_ids.pop(sid, None)
-    _agent_pending_tool_call_ids.pop(sid, None)
+    active = _agent_active_tool_call_ids.pop(sid, None)
+    pending = _agent_pending_tool_call_ids.pop(sid, None)
+    if active:
+        _agent_tool_metadata.pop(active, None)
+    if pending:
+        for tool_call_id in pending:
+            _agent_tool_metadata.pop(tool_call_id, None)
 
 
 def _emit_agent_stopping(session_id: str, *, detail: str = "manual_stop") -> None:
@@ -202,13 +225,16 @@ def _emit_agent_stopping(session_id: str, *, detail: str = "manual_stop") -> Non
         return
     _agent_stopping_sessions.add(sid)
     tool_call_id = _resolve_agent_tool_call_id(sid)
+    tool_meta = _get_agent_tool_metadata(tool_call_id)
     _notify_run_status(
         session_id=sid,
         run_id=sid,
         source="agent",
         phase="stopping",
         detail=detail,
+        tool_id=tool_meta.get("tool_id", ""),
         tool_call_id=tool_call_id,
+        ui_behavior=tool_meta.get("ui_behavior", "silent"),
     )
     _notify_run_log(
         session_id=sid,
@@ -228,6 +254,7 @@ def _emit_task_stopping(task_info: Dict[str, Any], *, detail: str = "manual_stop
         _task_stopping_run_ids.add(run_id)
     session_id = str(task_info.get("session_id") or "default")
     tool_id = str(task_info.get("tool_id") or "")
+    tool_meta = get_registry().get_tool_metadata(tool_id)
     _notify_run_status(
         session_id=session_id,
         run_id=run_id,
@@ -235,6 +262,7 @@ def _emit_task_stopping(task_info: Dict[str, Any], *, detail: str = "manual_stop
         phase="stopping",
         tool_id=tool_id,
         detail=detail,
+        ui_behavior=str(tool_meta.get("ui_behavior") or "silent"),
     )
     _notify_run_log(
         session_id=session_id,
@@ -332,6 +360,8 @@ async def _run_registered_task(
     input_data: Dict[str, Any],
 ) -> None:
     registry = get_registry()
+    tool_meta = registry.get_tool_metadata(tool_id)
+    ui_behavior = str(tool_meta.get("ui_behavior") or "silent")
     task_manager.set_state(task.task_id, "RUNNING")
     _task_stopping_run_ids.discard(task.task_id)
     _notify_run_status(
@@ -340,6 +370,7 @@ async def _run_registered_task(
         source="task",
         phase="started",
         tool_id=tool_id,
+        ui_behavior=ui_behavior,
     )
     try:
         wait_status_sent = False
@@ -356,6 +387,7 @@ async def _run_registered_task(
                 phase="running",
                 tool_id=tool_id,
                 detail="waiting_for_lock",
+                ui_behavior=ui_behavior,
             )
 
         result = await asyncio.to_thread(
@@ -385,6 +417,7 @@ async def _run_registered_task(
                 phase="cancelled",
                 tool_id=tool_id,
                 result=result,
+                ui_behavior=ui_behavior,
             )
             msg = str((result or {}).get("message") or "任务已停止")
             _notify(
@@ -410,6 +443,7 @@ async def _run_registered_task(
                 tool_id=tool_id,
                 result=result,
                 error=error_msg,
+                ui_behavior=ui_behavior,
             )
             _notify(
                 "event.run.log",
@@ -432,6 +466,7 @@ async def _run_registered_task(
                 phase="completed",
                 tool_id=tool_id,
                 result=result,
+                ui_behavior=ui_behavior,
             )
             msg = str((result or {}).get("message") or "任务已完成")
             _notify(
@@ -456,6 +491,7 @@ async def _run_registered_task(
             phase="cancelled",
             tool_id=tool_id,
             result=cancelled_result,
+            ui_behavior=ui_behavior,
         )
         _notify(
             "event.run.log",
@@ -480,6 +516,7 @@ async def _run_registered_task(
             phase="error",
             tool_id=tool_id,
             error=str(exc),
+            ui_behavior=ui_behavior,
         )
         _notify(
             "event.run.log",
@@ -647,27 +684,34 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
                 _agent_stopping_sessions.discard(session_id)
                 _clear_agent_tool_call_id(session_id)
             elif status_type == "on_tool_start":
-                tool_call_id = _bind_agent_tool_call_id(session_id)
+                tool_meta = meta if isinstance(meta, dict) else {}
+                tool_call_id = _bind_agent_tool_call_id(session_id, tool_meta)
                 _notify_run_status(
                     session_id=session_id,
                     run_id=session_id,
                     source="agent",
                     phase="started",
                     detail=detail,
+                    tool_id=str(tool_meta.get("tool_id") or ""),
                     tool_call_id=tool_call_id,
+                    ui_behavior=str(tool_meta.get("ui_behavior") or "silent"),
                 )
             elif status_type == "on_tool_stopping":
                 tool_call_id = _resolve_agent_tool_call_id(session_id, activate_pending=True)
+                tool_meta = _get_agent_tool_metadata(tool_call_id)
                 _notify_run_status(
                     session_id=session_id,
                     run_id=session_id,
                     source="agent",
                     phase="stopping",
                     detail=detail,
+                    tool_id=tool_meta.get("tool_id", ""),
                     tool_call_id=tool_call_id,
+                    ui_behavior=tool_meta.get("ui_behavior", "silent"),
                 )
             elif status_type == "on_tool_end":
                 tool_call_id = _resolve_agent_tool_call_id(session_id, activate_pending=True)
+                tool_meta = _get_agent_tool_metadata(tool_call_id)
                 output = meta.get("output") if isinstance(meta, dict) else None
                 result_status = ""
                 result_message = ""
@@ -711,12 +755,15 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
                     source="agent",
                     phase=phase,
                     detail=detail,
+                    tool_id=tool_meta.get("tool_id", ""),
                     tool_call_id=tool_call_id,
+                    ui_behavior=tool_meta.get("ui_behavior", "silent"),
                 )
                 _agent_stopping_sessions.discard(session_id)
                 _complete_agent_tool_call_id(session_id)
             elif status_type in {"on_tool_error", "error"}:
                 tool_call_id = _resolve_agent_tool_call_id(session_id, activate_pending=True)
+                tool_meta = _get_agent_tool_metadata(tool_call_id)
                 error_message = ""
                 if isinstance(meta, dict):
                     error_message = str(meta.get("error") or "").strip()
@@ -736,7 +783,9 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
                     source="agent",
                     phase="error",
                     detail=detail,
+                    tool_id=tool_meta.get("tool_id", ""),
                     tool_call_id=tool_call_id,
+                    ui_behavior=tool_meta.get("ui_behavior", "silent"),
                 )
                 _agent_stopping_sessions.discard(session_id)
                 _complete_agent_tool_call_id(session_id)
