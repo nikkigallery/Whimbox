@@ -86,7 +86,7 @@
         },
         "auto_close_game": {
             "value": "false",
-            "description": "一条龙结束后，关闭游戏"
+            "description": "一条龙结束后，关闭游戏和奇想盒"
         },
         "start_magnet": {
             "value": "false",

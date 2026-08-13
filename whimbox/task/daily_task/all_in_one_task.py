@@ -6,6 +6,7 @@ from whimbox.task.mira_crown_task.mira_crown_task import MiraCrownTask
 from whimbox.task.daily_task.cvar import *
 from whimbox.task.common_task.start_game_task import StartGameTask
 from whimbox.task.common_task.close_game_task import CloseGameTask
+from whimbox.event_bus import emit_event
 from whimbox.task.common_task.change_account_task import ChangeAccountTask
 from whimbox.task.common_task.enter_game_task import EnterGameTask
 from whimbox.task.macro_task.run_macro_task import RunMacroTask
@@ -481,7 +482,7 @@ class AllInOneTask(TaskTemplate):
             },
         )
 
-    @register_step("关闭游戏")
+    @register_step("关闭游戏和奇想盒")
     def step_close_game(self):
         task_result = CloseGameTask(self.session_id).task_run()
         if task_result.status == STATE_TYPE_STOP:
@@ -490,6 +491,13 @@ class AllInOneTask(TaskTemplate):
         if task_result.status != STATE_TYPE_SUCCESS:
             self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message or "关闭游戏失败")
             return STEP_NAME_FINISH
+        emit_event(
+            "event.app.quit",
+            {
+                "reason": "one_dragon_completed",
+                "session_id": self.session_id,
+            },
+        )
 
     def handle_finally(self):
         # 有可能最后一步是关闭游戏，要额外判断一下避免finally时报错
