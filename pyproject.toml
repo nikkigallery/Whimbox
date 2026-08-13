@@ -30,7 +30,7 @@ dependencies = [
     "langchain-community==0.4.1",
     "langchain-openai==1.2.1",
     "langchain-anthropic==1.4.3",
-    "langchain-deepseek==1.0.1",
+    "langchain-deepseek==1.1.0",
     "langchain-google-genai==4.2.2",
     "loguru==0.7.3",
     "onnxruntime==1.19.0",
