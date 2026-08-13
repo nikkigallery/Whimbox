@@ -8,6 +8,7 @@ from whimbox.common.path_lib import ASSETS_PATH
 from whimbox.common.scripts_manager import scripts_manager
 from whimbox.config.config import global_config
 from whimbox.config.default_config import DEFAULT_CONFIG
+from whimbox.event_bus import emit_event
 from whimbox.task.background_task import BackgroundFeature, background_manager
 from whimbox.weixin_service import weixin_service
 
@@ -72,8 +73,9 @@ def handle_script_method(method: str, params: Dict[str, Any]) -> Any:
         return {"deleted": deleted}
 
     if method == "script.refresh":
-        scripts_manager.init_scripts_dict()
-        return {"ok": True}
+        snapshot = scripts_manager.init_scripts_dict()
+        emit_event("event.scripts.changed", {**snapshot, "source": "manual"})
+        return {"ok": True, **snapshot}
 
     return UNHANDLED
 

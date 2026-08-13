@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal
 import os
 import json
+import threading
 
 from whimbox.common.path_lib import SCRIPT_PATH
 from whimbox.common.logger import logger
@@ -174,17 +175,19 @@ class ScriptsManager:
     def __init__(self):
         if self._initialized:
             return
+        self._scripts_lock = threading.RLock()
+        self._scripts_version = 0
         self.path_dict = {}
         self.macro_dict = {}
         self.init_scripts_dict()
 
         self._initialized = True
 
-    def init_scripts_dict(self):
-        self.path_dict = {}
-        self.macro_dict = {}
+    def init_scripts_dict(self) -> dict:
+        path_dict: dict[str, PathRecord] = {}
+        macro_dict: dict[str, MacroRecord] = {}
         # 使用 os.walk 递归遍历所有子文件夹
-        for root, dirs, files in os.walk(SCRIPT_PATH):
+        for root, _, files in os.walk(SCRIPT_PATH):
             for file in files:
                 if file.endswith(".json"):
                     file_path = os.path.join(root, file)
@@ -195,35 +198,50 @@ class ScriptsManager:
                             if json_dict['info']['type'] == '宏' or json_dict['info']['type'] == '乐谱':
                                 macro_record = MacroRecord.model_validate_json(json_text)
                                 macro_name = macro_record.info.name
-                                if macro_name in self.macro_dict:
-                                    if self.macro_dict[macro_name].info.update_time < macro_record.info.update_time:
-                                        self.macro_dict[macro_name] = macro_record
+                                if macro_name in macro_dict:
+                                    if macro_dict[macro_name].info.update_time < macro_record.info.update_time:
+                                        macro_dict[macro_name] = macro_record
                                     else:
                                         continue
                                 else:
-                                    self.macro_dict[macro_name] = macro_record
+                                    macro_dict[macro_name] = macro_record
                             else:
                                 path_record = PathRecord.model_validate_json(json_text)
                                 path_name = path_record.info.name
-                                if path_name in self.path_dict:
-                                    if self.path_dict[path_name].info.update_time < path_record.info.update_time:
-                                        self.path_dict[path_name] = path_record
+                                if path_name in path_dict:
+                                    if path_dict[path_name].info.update_time < path_record.info.update_time:
+                                        path_dict[path_name] = path_record
                                     else:
                                         continue
                                 else:
-                                    self.path_dict[path_name] = path_record
+                                    path_dict[path_name] = path_record
                         except Exception as e:
                             logger.error(f"读取脚本文件{file_path}失败: {e}")
                             continue
 
+        with self._scripts_lock:
+            self.path_dict = path_dict
+            self.macro_dict = macro_dict
+            self._scripts_version += 1
+            version = self._scripts_version
+
+        return {
+            "version": version,
+            "path_count": len(path_dict),
+            "macro_count": sum(record.info.type != "乐谱" for record in macro_dict.values()),
+            "music_count": sum(record.info.type == "乐谱" for record in macro_dict.values()),
+        }
+
     def query_path(self, path_name=None, name=None, target=None, type=None, count=None, return_one=False, show_default=False) -> list[PathRecord] | PathRecord | None:
+        with self._scripts_lock:
+            path_dict = self.path_dict
         # 指定名字就直接返回单文件（用于内部固定路线的任务使用，比如每日任务）
         if path_name:
-            return self.path_dict.get(path_name, None)
+            return path_dict.get(path_name, None)
         
         # 根据要求进行筛选
         res = []
-        for _, path_record in self.path_dict.items():
+        for _, path_record in path_dict.items():
             match = True
             
             if (not show_default) and (
@@ -425,18 +443,21 @@ class ScriptsManager:
         Returns:
             如果指定name且找到，返回单个MacroRecord；如果name为None，返回匹配的列表
         """
+        with self._scripts_lock:
+            macro_dict = self.macro_dict
+
         # 指定名字就直接返回单文件
         if name:
             # 尝试精确匹配
-            if name in self.macro_dict:
+            if name in macro_dict:
                 if return_one:
-                    return self.macro_dict[name]
+                    return macro_dict[name]
                 else:
-                    return [self.macro_dict[name]]
+                    return [macro_dict[name]]
             
             # 模糊匹配
             res = []
-            for macro_name, macro_record in self.macro_dict.items():
+            for macro_name, macro_record in macro_dict.items():
                 if (not show_default) and (
                     macro_record.info.name.startswith("朝夕心愿_") 
                     or macro_record.info.name.startswith("星海拾光_")
@@ -460,7 +481,7 @@ class ScriptsManager:
         
         # 返回所有宏
         res = []
-        for _, macro_record in self.macro_dict.items():
+        for _, macro_record in macro_dict.items():
             if (not show_default) and (
                 macro_record.info.name.startswith("朝夕心愿_") 
                 or macro_record.info.name.startswith("星海拾光_")

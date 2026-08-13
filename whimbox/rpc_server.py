@@ -10,6 +10,7 @@ from pynput import keyboard
 
 from whimbox.common.cvars import RPC_CONFIG, has_foreground_task
 from whimbox.common.logger import logger
+from whimbox.common.scripts_watcher import scripts_watcher
 from whimbox.config.config import global_config
 from whimbox.agent import whimbox_agent
 from whimbox.event_bus import set_notifier
@@ -1012,5 +1013,9 @@ async def start_rpc_server():
     set_notifier(notify_event)
     asyncio.create_task(weixin_service.auto_restore())
     _start_overlay_hotkey_listener()
-    async with websockets.serve(_ws_handler, host, port, max_size=10 * 1024 * 1024):
-        await asyncio.Future()
+    scripts_watcher.start()
+    try:
+        async with websockets.serve(_ws_handler, host, port, max_size=10 * 1024 * 1024):
+            await asyncio.Future()
+    finally:
+        scripts_watcher.stop()
