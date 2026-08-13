@@ -390,7 +390,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertFalse(status["authenticated"])
         self.assertEqual(status["auth_state"], "anonymous")
 
-    def test_decorated_points_are_cached_until_user_state_changes(self) -> None:
+    def test_user_state_refresh_does_not_rebuild_all_points(self) -> None:
         credentials = PearPalCredentials(
             token="abcDEF0123456789",
             openid="12405094",
@@ -404,25 +404,21 @@ class PearPalUserStateTests(unittest.TestCase):
             login_background=False,
         )
         provider.list_labels()
+        original_points = provider._points
+        original_point_by_id = provider._point_by_id
 
-        with patch.object(
-            provider,
-            "_decorate_point_locked",
-            wraps=provider._decorate_point_locked,
-        ) as decorate_point:
-            provider.list_points()
-            provider.list_points()
-            provider.get_user_status()
-            self.assertEqual(decorate_point.call_count, 3)
+        provider.start_login()
+        provider.list_points()
+        provider.get_user_status()
+        self.assertIs(provider._points, original_points)
+        self.assertIs(provider._point_by_id, original_point_by_id)
+        self.assertFalse(
+            hasattr(provider, "_decorated_points_cache")
+        )
 
-            provider.start_login()
-            provider.list_points()
-            provider.get_user_status()
-            self.assertEqual(decorate_point.call_count, 6)
-
-            provider.disconnect_user()
-            provider.list_points()
-            self.assertEqual(decorate_point.call_count, 9)
+        provider.disconnect_user()
+        self.assertIs(provider._points, original_points)
+        self.assertIs(provider._point_by_id, original_point_by_id)
 
     def test_auto_refresh_manual_refresh_and_failure_backoff(self) -> None:
         credentials = PearPalCredentials(

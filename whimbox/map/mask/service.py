@@ -16,7 +16,7 @@ from .provider import MapMaskProvider
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 
-_DETECTION_WORKER_DELAY_SECONDS = 0.01
+_DETECTION_WORKER_DELAY_SECONDS = 0.02
 _DETECTION_WORKER_IDLE_SECONDS = 2.0
 
 
