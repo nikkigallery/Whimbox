@@ -4,7 +4,7 @@ from whimbox.ui.page_assets import *
 from whimbox.ui.ui_assets import *
 from whimbox.interaction.interaction_core import itt
 from whimbox.common.logger import logger
-from whimbox.common.utils.ui_utils import scroll_find_click, wait_until_appear_then_click
+from whimbox.common.utils.ui_utils import scroll_find_click, wait_until_appear_then_click, wait_until_appear
 from whimbox.common.utils.img_utils import similar_img
 from whimbox.task.common_task.enter_game_task import EnterGameTask
 
@@ -79,7 +79,9 @@ class ChangeAccountTask(TaskTemplate):
         # 如果当前已经是退出登录状态，直接去下一步
         if itt.get_img_existence(ButtonLogin):
             return
-        if wait_until_appear_then_click(ButtonExitLogout, retry_time=20):
+        if wait_until_appear(ButtonExitLogout, retry_time=30):
+            itt.delay(3, comment="等待退出账号按钮真正可交互")
+            ButtonExitLogout.click()
             while not self.need_stop():
                 itt.delay(1)
                 text_box_dict = itt.ocr_and_detect_posi(AreaLoginOCR)
