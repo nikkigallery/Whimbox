@@ -186,6 +186,9 @@ IconAbilityStick = ImgIcon()    # 黏黏爪
 IconAbilityFlourish = ImgIcon()    # 芳间巡游
 IconAbilityShapeshifting = ImgIcon()    # 化万相
 IconAbilityStarCollect = ImgIcon() # 采星
+IconAbilityMachine = ImgIcon() # 械控
+IconAbilityMachineInfuse = ImgIcon() # 械控注入
+IconAbilityMachineExtract = ImgIcon() # 械控抽取
 AreaAbilityChange = Area(anchor=ANCHOR_RIGHT_CENTER)
 ButtonAbilitySave = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_RIGHT)
 AreaAbilityPlanChangeButton = Area(anchor=ANCHOR_TOP_LEFT)

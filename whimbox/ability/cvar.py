@@ -30,6 +30,9 @@ ability_hsv_icons = [
     IconAbilityFlourish,
     IconAbilityShapeshifting,
     IconAbilityStarCollect,
+    IconAbilityMachine,
+    IconAbilityMachineExtract,
+    IconAbilityMachineInfuse,
 ]
 jump_ability_hsv_icons = [IconAbilityFloat, IconAbilityWing]
 
@@ -44,6 +47,7 @@ ABILITY_NAME_FLOURISH = '芳间巡游'
 ABILITY_NAME_SHAPESHIFTING = '化万相'
 ABILITY_NAME_STAR_COLLECT = '采星'
 ABILITY_NAME_RHYTHMS = '万物交响'
+ABILITY_NAME_MACHINE = '械控'
 
 ABILITY_NAME_FLOAT = '漂浮'
 ABILITY_NAME_WING = '悬羽'
@@ -62,4 +66,7 @@ icon_name_to_ability_name = {
     'IconAbilityFlourish': ABILITY_NAME_FLOURISH,
     'IconAbilityShapeshifting': ABILITY_NAME_SHAPESHIFTING,
     'IconAbilityStarCollect': ABILITY_NAME_STAR_COLLECT,
+    'IconAbilityMachine': ABILITY_NAME_MACHINE,
+    'IconAbilityMachineExtract': ABILITY_NAME_MACHINE,
+    'IconAbilityMachineInfuse': ABILITY_NAME_MACHINE,
 }

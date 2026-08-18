@@ -455,6 +455,15 @@
   "IconAbilityInsect": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityInsect.png"
   },
+  "IconAbilityMachine": {
+    "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityMachine.png"
+  },
+  "IconAbilityMachineExtract": {
+    "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityMachineExtract.png"
+  },
+  "IconAbilityMachineInfuse": {
+    "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityMachineInfuse.png"
+  },
   "IconAbilityRhythms": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityRhythms.png"
   },

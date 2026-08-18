@@ -240,7 +240,16 @@ class AbilityManager:
         if key:
             itt.key_press(self.get_ability_keybind(key))
             self.current_ability = ability_name
-            itt.delay(0.5, comment="等待能力切换完成")
+            times = 5
+            while times > 0:
+                stop_flag = get_current_stop_flag()
+                if stop_flag.is_set():
+                    return False
+                itt.delay(0.5, comment="等待能力切换完成")
+                if self.get_current_ability() == ability_name:
+                    break
+                else:
+                    times -= 1
             return True
         else:
             raise Exception('切换能力失败')
@@ -266,9 +275,10 @@ ability_manager = AbilityManager()
 
 if __name__ == "__main__":
     # CV_DEBUG_MODE = True
-    ability_manager.init_need_ability([ABILITY_NAME_FISH, ABILITY_NAME_STAR_COLLECT, ABILITY_NAME_SHAPESHIFTING, ABILITY_NAME_INSECT])
-    ability_manager.change_ability(ABILITY_NAME_SHAPESHIFTING)
+    # ability_manager.init_need_ability([ABILITY_NAME_FISH, ABILITY_NAME_STAR_COLLECT, ABILITY_NAME_SHAPESHIFTING, ABILITY_NAME_INSECT])
+    # ability_manager.change_ability(ABILITY_NAME_SHAPESHIFTING)
     # print(ability_manager.get_current_ability())
+    print(ability_manager.check_current_ability(IconAbilityMachineInfuse))
     # ability_manager._check_jump_ability()
     # ability_manager._check_ability_keymap()
     # print(ability_manager.ability_keymap)
