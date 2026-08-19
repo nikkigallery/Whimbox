@@ -135,41 +135,6 @@ class Map(MiniMap, BigMap):
             self.smallmap_upd_timer.reset()
             return True
 
-    def get_smallmap_from_teleporter(self, area=None):
-        if area == None:
-            area = ['Inazuma', "Liyue", "Mondstadt"]
-        tpers_dict = []
-        rlist = []
-        rd = []
-        added = []
-        for md in [60]:
-            logger.info(f"d: {md}")
-            for i in DICT_TELEPORTER:
-                tper = DICT_TELEPORTER[i]
-                if not tper.region in area:
-                    continue
-
-                # logger.info(f"init_position:{tper.position}")
-                self.init_position(tper.position)
-                self.get_position()
-                d = euclidean_distance(self.get_position(),
-                                       self.convert_GIMAP_to_cvAutoTrack(tper.position))
-                if d <= md:
-                    if tper in added:
-                        continue
-                    tpers_dict.append(
-                        {
-                            'tper': tper,
-                            'd': d
-                        }
-                    )
-                    # logger.info(f"id {len(rlist)-1} position {tper.position} {tper.name} {tper.region}, d={d}")
-                    added.append(tper)
-        tpers_dict.sort(key=lambda x: x['d'])
-        return [i['tper'] for i in tpers_dict], [i['d'] for i in tpers_dict]
-        # self.init_position(tuple(list(map(int,max_position))))
-        # logger.info(f"init_smallmap_from_teleporter:{max_n} {max_position} {max_tper.name}")
-
     def get_direction(self) -> float:
         self.update_direction(itt.capture())
         return self.direction
