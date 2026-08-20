@@ -421,8 +421,18 @@ class AllInOneTask(TaskTemplate):
             finished_account_list=self.finished_account_list
         ).task_run()
 
+        if task_result.status == STATE_TYPE_STOP:
+            self.update_task_result(status=STATE_TYPE_STOP, message=task_result.message or "任务已停止")
+            return STEP_NAME_FINISH
         if task_result.status == STATE_TYPE_SUCCESS:
-            self.current_account = task_result.data['current_account']
+            result_data = task_result.data if isinstance(task_result.data, dict) else {}
+            if result_data.get("no_remaining_account"):
+                self.log_to_gui("未找到未完成账号，多账号一条龙结束")
+                return "step8"
+            self.current_account = result_data.get("current_account", "")
+            if not self.current_account:
+                self.log_to_gui("未识别到切换账号，多账号一条龙结束")
+                return "step8"
             return
         else:
             self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message)

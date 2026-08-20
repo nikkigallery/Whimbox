@@ -125,9 +125,19 @@ class ChangeAccountTask(TaskTemplate):
                 else:
                     cap = new_cap
             logger.info(f"账号列表: {self.account_list}")
-        
+
+        if self.need_stop():
+            return STEP_NAME_FINISH
+
         logger.info(f"已完成账号列表：{self.finished_account_list}")
         if len(self.finished_account_list) == 0:
+            if not self.account_list:
+                self.update_task_result(
+                    status=STATE_TYPE_SUCCESS,
+                    message="未识别到可切换账号，一条龙结束",
+                    data={"current_account": "", "no_remaining_account": True},
+                )
+                return STEP_NAME_FINISH
             scroll_find_click(AreaLoginOCR, "登录", need_scroll=False)
             self.current_account = self.account_list[0]
         else:
@@ -159,6 +169,17 @@ class ChangeAccountTask(TaskTemplate):
                     cap = new_cap
 
         logger.info(f"当前账号: {self.current_account}")
+        if self.need_stop():
+            return STEP_NAME_FINISH
+        if not self.current_account:
+            logger.info("未找到未完成账号，结束多账号一条龙流程")
+            self.update_task_result(
+                status=STATE_TYPE_SUCCESS,
+                message="未找到未完成账号，一条龙结束",
+                data={"current_account": "", "no_remaining_account": True},
+            )
+            return STEP_NAME_FINISH
+
         self.log_to_gui("账号切换完毕，开始进入游戏")
         task_result = EnterGameTask(session_id=self.session_id).task_run()
         if task_result.status == STATE_TYPE_SUCCESS:
