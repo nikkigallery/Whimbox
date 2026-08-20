@@ -4,6 +4,7 @@ import threading
 import time
 from typing import Any
 
+from whimbox.common.handle_lib import HANDLE_OBJ
 from whimbox.common.logger import logger
 from whimbox.config.config import global_config
 
@@ -11,6 +12,7 @@ from .bigmap_state_provider import BigMapDetectionState, BigMapStateProvider
 from .coordinate import point_to_visible
 from .local_provider import LocalJsonProvider
 from .models import MapMaskLabel, MapMaskState, MapMaskViewport
+from .mouse_wheel_guard import MouseWheelGuard
 from .pearpal_provider import OfficialPearPalProvider
 from .provider import MapMaskProvider
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
@@ -18,6 +20,9 @@ from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 _DETECTION_WORKER_DELAY_SECONDS = 0.02
 _DETECTION_WORKER_IDLE_SECONDS = 2.0
+_WHEEL_BIGMAP_STATE_MAX_AGE_SECONDS = 0.5
+_WHEEL_HINT_SECONDS = 2.0
+_WHEEL_HINT = "地图遮罩暂不支持滚轮缩放，请使用左下角缩放按钮"
 
 
 class MapMaskService:
@@ -44,6 +49,13 @@ class MapMaskService:
         self._detection_last_activity = 0.0
         self._detection_map_name: str | None = None
         self._detection_snapshot: tuple[BigMapDetectionState, ViewportResult] | None = None
+        self._wheel_bigmap_open = False
+        self._wheel_bigmap_detection_monotonic = 0.0
+        self._last_blocked_wheel_monotonic = 0.0
+        self._mouse_wheel_guard = MouseWheelGuard(
+            should_block=self._should_block_mouse_wheel,
+            on_blocked=self._note_mouse_wheel_blocked,
+        )
 
     def _touch_detection_worker(self, map_name: str | None) -> None:
         with self._detection_lock:
@@ -76,6 +88,7 @@ class MapMaskService:
 
     def _detection_loop(self) -> None:
         current_thread = threading.current_thread()
+        self._mouse_wheel_guard.start()
         logger.info("[map-mask-worker] started")
         stop_reason = "inactive"
         try:
@@ -106,6 +119,8 @@ class MapMaskService:
                         bigmap_state = self.bigmap_state_provider.detect(
                             captured_image=captured_image,
                         )
+                        self._wheel_bigmap_open = bool(bigmap_state.is_bigmap_open)
+                        self._wheel_bigmap_detection_monotonic = time.monotonic()
                         viewport_result = self._detect_viewport_result(
                             map_name=map_name,
                             is_bigmap_open=bigmap_state.is_bigmap_open,
@@ -115,6 +130,7 @@ class MapMaskService:
                         is_bigmap_open=bigmap_state.is_bigmap_open,
                     )
                 except Exception as exc:  # noqa: BLE001
+                    self._wheel_bigmap_open = False
                     logger.exception(f"[map-mask-worker] detection cycle failed: {exc}")
                 else:
                     with self._detection_lock:
@@ -124,12 +140,47 @@ class MapMaskService:
                 self._detection_wake.wait(_DETECTION_WORKER_DELAY_SECONDS)
                 self._detection_wake.clear()
         finally:
+            should_stop_wheel_guard = True
             with self._detection_lock:
                 if self._detection_thread is current_thread:
                     self._detection_thread = None
                     self._detection_snapshot = None
+                elif (
+                    self.enabled
+                    and self._detection_thread is not None
+                    and self._detection_thread.is_alive()
+                ):
+                    should_stop_wheel_guard = False
+            if should_stop_wheel_guard:
+                self._wheel_bigmap_open = False
+                self._wheel_bigmap_detection_monotonic = 0.0
+                self._last_blocked_wheel_monotonic = 0.0
+                self._mouse_wheel_guard.stop()
             self.official_provider.note_overlay_inactive()
             logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
+
+    def _should_block_mouse_wheel(self) -> bool:
+        if not self.enabled or not self._wheel_bigmap_open:
+            return False
+        if (
+            time.monotonic() - self._wheel_bigmap_detection_monotonic
+            > _WHEEL_BIGMAP_STATE_MAX_AGE_SECONDS
+        ):
+            return False
+        return HANDLE_OBJ.is_foreground()
+
+    def _note_mouse_wheel_blocked(self) -> None:
+        self._last_blocked_wheel_monotonic = time.monotonic()
+
+    def _wheel_overlay_hint(self) -> str:
+        if self._last_blocked_wheel_monotonic <= 0:
+            return ""
+        if (
+            time.monotonic() - self._last_blocked_wheel_monotonic
+            <= _WHEEL_HINT_SECONDS
+        ):
+            return _WHEEL_HINT
+        return ""
 
     def _detect_viewport_result(
         self,
@@ -191,6 +242,8 @@ class MapMaskService:
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
         self.enabled = bool(enabled)
         if not self.enabled:
+            self._wheel_bigmap_open = False
+            self._last_blocked_wheel_monotonic = 0.0
             with self._detection_lock:
                 self._detection_snapshot = None
                 self._detection_wake.set()
@@ -388,6 +441,10 @@ class MapMaskService:
             map_scale_source=viewport_result.map_scale_source,
             viewport_span_source=viewport_result.viewport_span_source,
             assumes_max_bigmap_zoom=viewport_result.assumes_max_bigmap_zoom,
+            zoom_status=viewport_result.zoom_status,
+            zoom_level=viewport_result.zoom_level,
+            zoom_confidence=viewport_result.zoom_confidence,
+            overlay_hint=self._wheel_overlay_hint() or viewport_result.overlay_hint,
             detection_mode=bigmap_state.detection_mode,
             detection_source=bigmap_state.detection_source,
             detection_confidence=bigmap_state.detection_confidence,

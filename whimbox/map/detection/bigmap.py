@@ -1,4 +1,6 @@
+import math
 from dataclasses import dataclass
+
 from whimbox.common.utils.utils import *
 from whimbox.common.utils.img_utils import *
 from whimbox.common.utils.posi_utils import *
@@ -25,14 +27,26 @@ class BigMapPrediction:
     similarity_local: float
 
 
-def predict_bigmap(image, map_name: str) -> BigMapPrediction:
+def predict_bigmap(
+    image,
+    map_name: str,
+    *,
+    map_scale: float | None = None,
+) -> BigMapPrediction:
     """Match one big-map screenshot without clicking UI or mutating global state."""
     if map_name not in MAP_ASSETS_DICT:
         raise RuntimeError(f"bigmap asset unavailable for {map_name!r}")
     if map_name not in BIGMAP_POSITION_SCALE_DICT:
         raise RuntimeError(f"bigmap scale unavailable for {map_name!r}")
 
-    resize_scale = BIGMAP_POSITION_SCALE_DICT[map_name] * BIGMAP_SEARCH_SCALE
+    resolved_map_scale = (
+        BIGMAP_POSITION_SCALE_DICT[map_name]
+        if map_scale is None
+        else float(map_scale)
+    )
+    if not math.isfinite(resolved_map_scale) or resolved_map_scale <= 0:
+        raise RuntimeError(f"invalid bigmap scale: {resolved_map_scale!r}")
+    resize_scale = resolved_map_scale * BIGMAP_SEARCH_SCALE
     luma = rgb2luma(image)
     center_offset = (
         np.asarray(image_size(luma), dtype=np.float64) / 2 * resize_scale

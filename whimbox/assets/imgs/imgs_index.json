@@ -503,6 +503,12 @@
   "IconBigMapMaxScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapMaxScale.png"
   },
+  "IconBigMapSecondScale": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScale.png"
+  },
+  "IconBigMapThirdScale": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScale.png"
+  },
   "IconClickSkip": {
     "rel_path": "imgs\\Windows\\General\\IconClickSkip.png"
   },

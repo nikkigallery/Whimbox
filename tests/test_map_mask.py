@@ -11,8 +11,11 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
+from whimbox.common.handle_lib import HANDLE_OBJ
 from whimbox.map.mask.auto_viewport_provider import (
     HybridAutoCenterViewportProvider,
+    _ZoomDetection,
+    _zoom_scale_for_level,
 )
 from whimbox.map.mask.bigmap_match_diagnostics import BigMapMatchAnalysis
 from whimbox.map.mask.bigmap_state_provider import (
@@ -590,6 +593,17 @@ class BigMapStateProviderTests(unittest.TestCase):
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
+    def test_miraland_zoom_profiles_use_measured_anchor_scales(self) -> None:
+        self.assertAlmostEqual(
+            _zoom_scale_for_level("miraland", "second"),
+            2.784,
+        )
+        self.assertAlmostEqual(
+            _zoom_scale_for_level("miraland", "third"),
+            1.162,
+        )
+        self.assertAlmostEqual(_zoom_scale_for_level("miraland", "max"), 0.637)
+
     def test_hybrid_auto_center_is_the_default_mode(self) -> None:
         with patch.dict(
             os.environ,
@@ -625,6 +639,14 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         provider._capture_game = Mock(
             return_value=np.zeros((1080, 1920, 4), dtype=np.uint8)
         )
+        provider._detect_zoom_level = Mock(
+            return_value=_ZoomDetection(
+                status="supported",
+                level="max",
+                reference_scale=0.637,
+                confidence=1.0,
+            )
+        )
         provider._detect_motion = Mock(
             side_effect=[
                 (0.0, False),
@@ -638,9 +660,9 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
                 {
                     "center_x": 16000.0,
                     "center_y": 14000.0,
-                    "confidence": 0.32,
+                    "confidence": 0.4,
                     "local_confidence": None,
-                    "global_confidence": 0.32,
+                    "global_confidence": 0.4,
                     "source": "global-top1",
                     "matching_status": "matching_provisional",
                     "matching_rejection_reason": "weak global match",
@@ -648,9 +670,9 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
                 {
                     "center_x": 16000.0,
                     "center_y": 14000.0,
-                    "confidence": 0.32,
+                    "confidence": 0.4,
                     "local_confidence": None,
-                    "global_confidence": 0.32,
+                    "global_confidence": 0.4,
                     "source": "global-top1",
                     "matching_status": "matching_provisional",
                     "matching_rejection_reason": "weak global match",
@@ -722,6 +744,29 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
 
 
 class DetectionWorkerLifecycleTests(unittest.TestCase):
+    def test_wheel_blocking_requires_fresh_bigmap_and_game_foreground(self) -> None:
+        service = MapMaskService()
+        service.enabled = True
+        service._wheel_bigmap_open = True
+        service._wheel_bigmap_detection_monotonic = time.monotonic()
+
+        with patch.object(HANDLE_OBJ, "is_foreground", return_value=True):
+            self.assertTrue(service._should_block_mouse_wheel())
+        with patch.object(HANDLE_OBJ, "is_foreground", return_value=False):
+            self.assertFalse(service._should_block_mouse_wheel())
+
+        service._wheel_bigmap_detection_monotonic = time.monotonic() - 1.0
+        with patch.object(HANDLE_OBJ, "is_foreground", return_value=True):
+            self.assertFalse(service._should_block_mouse_wheel())
+
+    def test_blocked_wheel_hint_expires(self) -> None:
+        service = MapMaskService()
+        service._note_mouse_wheel_blocked()
+        self.assertIn("不支持滚轮缩放", service._wheel_overlay_hint())
+
+        service._last_blocked_wheel_monotonic = time.monotonic() - 3.0
+        self.assertEqual(service._wheel_overlay_hint(), "")
+
     def test_visible_points_request_starts_worker_and_disable_stops_it(self) -> None:
         service = MapMaskService()
         service.provider = service.local_provider

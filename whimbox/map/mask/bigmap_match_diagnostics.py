@@ -70,11 +70,12 @@ def analyze_bigmap_match(
     image: Any,
     map_name: str,
     *,
+    map_scale: float | None = None,
     top_k: int = 5,
     nms_radius_png: float = 300.0,
 ) -> BigMapMatchAnalysis:
     source = np.asarray(image)
-    prediction = predict_bigmap(source, map_name)
+    prediction = predict_bigmap(source, map_name, map_scale=map_scale)
     resize_scale = prediction.resize_scale
     center_offset = prediction.center_offset
     preprocessed = prediction.preprocessed

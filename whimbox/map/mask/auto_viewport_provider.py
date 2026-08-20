@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 import os
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-from whimbox.common.utils.img_utils import rgb2luma
+from whimbox.common.utils.img_utils import crop, rgb2luma
 from whimbox.common.logger import logger
 from whimbox.map.detection.cvars import (
     BIGMAP_POSITION_SCALE_DICT,
@@ -29,11 +29,29 @@ if TYPE_CHECKING:
     from .viewport_provider import ManualCalibrationViewportProvider
 
 
-class HybridAutoCenterViewportProvider:
-    """Update only the map-image center from a big-map screenshot match.
+_MIRALAND_ZOOM_SCALE_ANCHORS = {
+    "second": 2.784,
+    "third": 1.162,
+    "max": 0.637,
+}
+_ZOOM_HINT_UNSUPPORTED = "当前地图缩放过小，请点击左下角“+”放大地图"
+_ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，建议将地图调整到最大缩放档位"
 
-    The map area and image span still come from manual calibration. This keeps
-    the first auto viewport pass deliberately conservative and side-effect free.
+
+@dataclass(frozen=True, slots=True)
+class _ZoomDetection:
+    status: str
+    level: str
+    reference_scale: float | None
+    confidence: float
+    hint: str = ""
+
+
+class HybridAutoCenterViewportProvider:
+    """Update the map-image center and zoom from a big-map screenshot match.
+
+    Screen bounds still come from calibration or the current capture. Matching
+    remains side-effect free and never clicks the game's zoom controls.
     """
 
     def __init__(self, manual_provider: ManualCalibrationViewportProvider) -> None:
@@ -141,20 +159,60 @@ class HybridAutoCenterViewportProvider:
         self._last_global_analysis: BigMapMatchAnalysis | None = None
         self._matching_status = "matching_failed"
         self._matching_rejection_reason = ""
+        self._zoom_detection = _ZoomDetection(
+            status="unknown",
+            level="",
+            reference_scale=None,
+            confidence=0.0,
+        )
 
     def get_viewport(
         self,
         map_name: str | None = None,
         captured_image: np.ndarray | None = None,
     ) -> ViewportResult:
+        resolved_map_name = map_name or "miraland"
+        try:
+            image = captured_image if captured_image is not None else self._capture_game()
+            self._zoom_detection = self._detect_zoom_level(
+                image,
+                resolved_map_name,
+            )
+        except Exception as exc:  # noqa: BLE001
+            reason = f"zoom detection failed: {type(exc).__name__}: {exc}"
+            logger.warning(reason)
+            self._reset_center_tracking()
+            return ViewportResult(
+                viewport=None,
+                mode="hybrid-auto-center",
+                source="zoom-detection-failed",
+                fallback_used=True,
+                fallback_reason=reason,
+                detection_error=reason,
+                stale=True,
+                zoom_status="error",
+                overlay_hint=_ZOOM_HINT_LOW_CONFIDENCE,
+            )
+
+        if self._zoom_detection.status != "supported":
+            self._reset_center_tracking()
+            return ViewportResult(
+                viewport=None,
+                mode="hybrid-auto-center",
+                source="unsupported-bigmap-zoom",
+                fallback_used=True,
+                fallback_reason="supported big-map zoom level was not detected",
+                stale=True,
+                **self._zoom_result_fields(),
+            )
+
         base = self.manual_provider.get_viewport(map_name=map_name)
         if base.viewport is None:
             try:
-                if captured_image is None:
-                    captured_image = self._capture_game()
                 base = _automatic_base_viewport(
-                    captured_image,
-                    map_name=map_name,
+                    image,
+                    map_name=resolved_map_name,
+                    map_scale=self._zoom_detection.reference_scale,
                 )
             except Exception as exc:  # noqa: BLE001
                 reason = f"automatic viewport base unavailable: {type(exc).__name__}: {exc}"
@@ -180,10 +238,6 @@ class HybridAutoCenterViewportProvider:
 
         now = time.monotonic()
         try:
-            if captured_image is None:
-                image = self._capture_game()
-            else:
-                image = captured_image
             motion_diff, motion_unstable = self._detect_motion(image)
             match = self._detect_tracking_first(
                 image,
@@ -198,6 +252,11 @@ class HybridAutoCenterViewportProvider:
             raw_center_x = float(match["center_x"])
             raw_center_y = float(match["center_y"])
             confidence = float(match["confidence"])
+            matched_scale = float(
+                match.get("map_scale")
+                or self._zoom_detection.reference_scale
+                or BIGMAP_POSITION_SCALE_DICT[base.viewport.map_name]
+            )
             local_confidence = _optional_number(match.get("local_confidence"))
             global_confidence = _optional_number(match.get("global_confidence"))
             selected_match_source = str(match["source"])
@@ -227,6 +286,34 @@ class HybridAutoCenterViewportProvider:
                     global_confidence=global_confidence,
                     selected_match_source=selected_match_source,
                     suppress_manual_viewport=True,
+                    hide_last_good=True,
+                )
+
+            if confidence < self._confidence_threshold:
+                reason = (
+                    f"map match confidence {confidence:.3f} below threshold "
+                    f"{self._confidence_threshold:.3f}"
+                )
+                self._matching_status = "matching_failed"
+                self._matching_rejection_reason = reason
+                self._reset_pending()
+                return self._fallback(
+                    base=base,
+                    reason=reason,
+                    detection_error=reason,
+                    confidence=confidence,
+                    raw_center_x=raw_center_x,
+                    raw_center_y=raw_center_y,
+                    tracking_mode=(
+                        "tracking" if self._last_good_center else "reacquire"
+                    ),
+                    motion_diff=motion_diff,
+                    motion_unstable=motion_unstable,
+                    local_confidence=local_confidence,
+                    global_confidence=global_confidence,
+                    selected_match_source=selected_match_source,
+                    suppress_manual_viewport=True,
+                    hide_last_good=True,
                 )
 
             if bool(match.get("force_global_reset")):
@@ -270,6 +357,7 @@ class HybridAutoCenterViewportProvider:
             accepted_center = decision["accepted_center"]
             assert isinstance(accepted_center, tuple)
             accepted_center_x, accepted_center_y = accepted_center
+            base = _base_with_map_scale(base, matched_scale)
             corrected_center_x, corrected_center_y = _apply_center_correction(
                 accepted_center,
                 base,
@@ -319,6 +407,7 @@ class HybridAutoCenterViewportProvider:
                 screen_height=base.screen_height,
                 **_span_result_fields(base),
                 **_correction_result_fields(base),
+                **self._zoom_result_fields(),
             )
             self._last_good_result = result
             return result
@@ -340,7 +429,8 @@ class HybridAutoCenterViewportProvider:
                 local_confidence=None,
                 global_confidence=None,
                 selected_match_source="none",
-                suppress_manual_viewport=self._last_good_result is None,
+                suppress_manual_viewport=True,
+                hide_last_good=True,
             )
 
     def _capture_game(self):
@@ -354,20 +444,76 @@ class HybridAutoCenterViewportProvider:
             raise RuntimeError(f"capture has invalid shape: {shape!r}")
         return image
 
+    def _detect_zoom_level(self, image, map_name: str) -> _ZoomDetection:
+        from whimbox.common.cvars import IMG_RATE
+        from whimbox.interaction.interaction_core import itt
+        from whimbox.ui.ui_assets import (
+            IconBigMapMaxScale,
+            IconBigMapSecondScale,
+            IconBigMapThirdScale,
+        )
+
+        icons = (
+            ("max", IconBigMapMaxScale),
+            ("third", IconBigMapThirdScale),
+            ("second", IconBigMapSecondScale),
+        )
+        best_level = ""
+        best_score = float("-inf")
+        for level, icon in icons:
+            icon_cap = crop(image, icon.cap_posi)
+            score = float(
+                itt.get_img_existence(
+                    icon,
+                    ret_mode=IMG_RATE,
+                    cap=icon_cap,
+                )
+            )
+            if score >= float(icon.threshold) and score > best_score:
+                best_level = level
+                best_score = score
+
+        if not best_level:
+            return _ZoomDetection(
+                status="unsupported",
+                level="",
+                reference_scale=None,
+                confidence=max(0.0, best_score),
+                hint=_ZOOM_HINT_UNSUPPORTED,
+            )
+
+        reference = _zoom_scale_for_level(
+            map_name,
+            best_level,
+        )
+        return _ZoomDetection(
+            status="supported",
+            level=best_level,
+            reference_scale=reference,
+            confidence=best_score,
+        )
+
     def _detect_tracking_first(self, image, map_name: str) -> dict[str, object]:
         local_confidence: float | None = None
-        if self._last_good_center is not None:
+        reference_scale = self._zoom_detection.reference_scale
+        if reference_scale is None:
+            raise RuntimeError("supported zoom has no reference scale")
+
+        tracking_center = self._last_good_center or self._pending_center
+        if tracking_center is not None:
             try:
                 center_x, center_y, local_confidence = self._detect_center_local(
                     image,
                     map_name,
-                    center=self._last_good_center,
+                    center=tracking_center,
+                    map_scale=reference_scale,
                 )
                 if local_confidence >= self._confidence_threshold:
                     return {
                         "center_x": center_x,
                         "center_y": center_y,
                         "confidence": local_confidence,
+                        "map_scale": reference_scale,
                         "local_confidence": local_confidence,
                         "global_confidence": None,
                         "source": "local",
@@ -379,14 +525,16 @@ class HybridAutoCenterViewportProvider:
             except Exception as exc:  # noqa: BLE001
                 logger.debug(f"hybrid local viewport match failed: {exc}")
 
-        center_x, center_y, global_confidence = self._detect_center_global(
+        center_x, center_y, global_confidence, global_scale = self._detect_center_global(
             image,
             map_name,
+            map_scale=reference_scale,
         )
         return {
             "center_x": center_x,
             "center_y": center_y,
             "confidence": global_confidence,
+            "map_scale": global_scale,
             "local_confidence": local_confidence,
             "global_confidence": global_confidence,
             "source": (
@@ -431,9 +579,10 @@ class HybridAutoCenterViewportProvider:
         self._last_global_check_monotonic = now
         self._last_global_check_time = _now()
         try:
-            global_x, global_y, confidence = self._detect_center_global(
+            global_x, global_y, confidence, global_scale = self._detect_center_global(
                 image,
                 map_name,
+                map_scale=self._zoom_detection.reference_scale,
             )
         except Exception as exc:  # noqa: BLE001
             self._global_check_center = None
@@ -477,6 +626,7 @@ class HybridAutoCenterViewportProvider:
             "center_x": global_x,
             "center_y": global_y,
             "confidence": confidence,
+            "map_scale": global_scale,
             "global_confidence": confidence,
             "source": "global-cross-check-reset",
             "force_global_reset": True,
@@ -486,8 +636,16 @@ class HybridAutoCenterViewportProvider:
         self,
         image,
         map_name: str,
-    ) -> tuple[float, float, float]:
-        analysis = analyze_bigmap_match(image, map_name)
+        *,
+        map_scale: float | None,
+    ) -> tuple[float, float, float, float]:
+        if map_scale is None:
+            raise RuntimeError("global map match requires a map scale")
+        analysis = analyze_bigmap_match(
+            image,
+            map_name,
+            map_scale=map_scale,
+        )
         self._last_global_analysis = analysis
         self._matching_status, self._matching_rejection_reason = (
             self._classify_global_match(analysis)
@@ -496,6 +654,7 @@ class HybridAutoCenterViewportProvider:
             analysis.selected_center[0],
             analysis.selected_center[1],
             analysis.selected_confidence,
+            float(map_scale),
         )
 
     def _classify_global_match(
@@ -564,11 +723,12 @@ class HybridAutoCenterViewportProvider:
         map_name: str,
         *,
         center: tuple[float, float],
+        map_scale: float,
     ) -> tuple[float, float, float]:
         if map_name not in MAP_ASSETS_DICT or map_name not in BIGMAP_POSITION_SCALE_DICT:
             raise RuntimeError(f"local map asset unavailable for {map_name!r}")
 
-        template_scale = BIGMAP_POSITION_SCALE_DICT[map_name] * BIGMAP_SEARCH_SCALE
+        template_scale = map_scale * BIGMAP_SEARCH_SCALE
         template = rgb2luma(image)
         template = cv2.resize(
             template,
@@ -705,6 +865,7 @@ class HybridAutoCenterViewportProvider:
         global_confidence: float | None,
         selected_match_source: str,
         suppress_manual_viewport: bool = False,
+        hide_last_good: bool = False,
     ) -> ViewportResult:
         now = time.monotonic()
         jump_distance = _distance_optional(
@@ -712,7 +873,8 @@ class HybridAutoCenterViewportProvider:
             self._last_good_center,
         )
         if (
-            self._last_good_result is not None
+            not hide_last_good
+            and self._last_good_result is not None
             and self._last_good_result.viewport is not None
             and self._last_good_result.viewport.map_name == base.viewport.map_name
         ):
@@ -765,6 +927,9 @@ class HybridAutoCenterViewportProvider:
                 reacquire_pending_count=0,
                 **self._cross_check_result_fields(),
                 **self._matching_result_fields(),
+                **self._zoom_result_fields(
+                    hint_override=_ZOOM_HINT_LOW_CONFIDENCE,
+                ),
                 stale=True,
             )
         else:
@@ -828,6 +993,9 @@ class HybridAutoCenterViewportProvider:
                 **_correction_result_fields(
                     base,
                     source_override="manual-calibration-fallback",
+                ),
+                **self._zoom_result_fields(
+                    hint_override=_ZOOM_HINT_LOW_CONFIDENCE,
                 ),
             )
 
@@ -1069,6 +1237,7 @@ class HybridAutoCenterViewportProvider:
             "reacquire_pending_count": self._pending_confirm_count,
             **self._cross_check_result_fields(),
             **self._matching_result_fields(),
+            **self._zoom_result_fields(),
             "stale": True,
         }
         if has_last_good:
@@ -1200,15 +1369,37 @@ class HybridAutoCenterViewportProvider:
             ),
         }
 
+    def _zoom_result_fields(
+        self,
+        *,
+        hint_override: str | None = None,
+    ) -> dict[str, object]:
+        zoom = self._zoom_detection
+        return {
+            "zoom_status": zoom.status,
+            "zoom_level": zoom.level,
+            "zoom_confidence": zoom.confidence,
+            "overlay_hint": zoom.hint if hint_override is None else hint_override,
+        }
+
 
 def _automatic_base_viewport(
     image,
     *,
     map_name: str | None,
+    map_scale: float | None = None,
 ) -> ViewportResult:
     resolved_map_name = map_name or "miraland"
-    map_scale = BIGMAP_POSITION_SCALE_DICT.get(resolved_map_name)
-    if map_scale is None or not math.isfinite(map_scale) or map_scale <= 0:
+    resolved_map_scale = (
+        BIGMAP_POSITION_SCALE_DICT.get(resolved_map_name)
+        if map_scale is None
+        else float(map_scale)
+    )
+    if (
+        resolved_map_scale is None
+        or not math.isfinite(resolved_map_scale)
+        or resolved_map_scale <= 0
+    ):
         raise RuntimeError(
             f"map scale unavailable for automatic viewport: {resolved_map_name!r}"
         )
@@ -1225,8 +1416,8 @@ def _automatic_base_viewport(
             f"capture has invalid size: {screen_width}x{screen_height}"
         )
 
-    image_width = screen_width * map_scale
-    image_height = screen_height * map_scale
+    image_width = screen_width * resolved_map_scale
+    image_height = screen_height * resolved_map_scale
     viewport = MapMaskViewport(
         map_name=resolved_map_name,
         image_left=-image_width / 2,
@@ -1246,10 +1437,44 @@ def _automatic_base_viewport(
         source="capture-derived-base",
         screen_width=screen_width,
         screen_height=screen_height,
-        map_scale=map_scale,
-        map_scale_source="BIGMAP_POSITION_SCALE_DICT",
+        map_scale=resolved_map_scale,
+        map_scale_source=(
+            "BIGMAP_POSITION_SCALE_DICT"
+            if map_scale is None
+            else "bigmap-zoom-ui-anchor"
+        ),
         viewport_span_source="map-scale",
-        assumes_max_bigmap_zoom=True,
+        assumes_max_bigmap_zoom=False,
+    )
+
+
+def _base_with_map_scale(
+    base: ViewportResult,
+    map_scale: float,
+) -> ViewportResult:
+    viewport = base.viewport
+    if viewport is None:
+        raise RuntimeError("cannot apply map scale without a base viewport")
+    if not math.isfinite(map_scale) or map_scale <= 0:
+        raise RuntimeError(f"invalid matched map scale: {map_scale!r}")
+    image_width = viewport.screen_width * map_scale
+    image_height = viewport.screen_height * map_scale
+    center_x = _viewport_center_x(viewport)
+    center_y = _viewport_center_y(viewport)
+    scaled_viewport = replace(
+        viewport,
+        image_left=center_x - image_width / 2,
+        image_top=center_y - image_height / 2,
+        image_width=image_width,
+        image_height=image_height,
+    )
+    return replace(
+        base,
+        viewport=scaled_viewport,
+        map_scale=map_scale,
+        map_scale_source="bigmap-zoom-ui-anchor",
+        viewport_span_source="fixed-map-scale",
+        assumes_max_bigmap_zoom=False,
     )
 
 
@@ -1364,6 +1589,24 @@ def _span_result_fields(base: ViewportResult) -> dict[str, object]:
         "viewport_span_source": base.viewport_span_source,
         "assumes_max_bigmap_zoom": base.assumes_max_bigmap_zoom,
     }
+
+
+def _zoom_scale_for_level(
+    map_name: str,
+    level: str,
+) -> float:
+    base_scale = BIGMAP_POSITION_SCALE_DICT.get(map_name)
+    if base_scale is None or not math.isfinite(base_scale) or base_scale <= 0:
+        raise RuntimeError(f"bigmap scale unavailable for {map_name!r}")
+    normalization = base_scale / _MIRALAND_ZOOM_SCALE_ANCHORS["max"]
+    anchors = {
+        name: scale * normalization
+        for name, scale in _MIRALAND_ZOOM_SCALE_ANCHORS.items()
+    }
+    try:
+        return anchors[level]
+    except KeyError as exc:
+        raise RuntimeError(f"unsupported bigmap zoom level: {level!r}") from exc
 
 
 def _distance(

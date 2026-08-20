@@ -87,6 +87,10 @@ class ViewportResult:
     map_scale_source: str = ""
     viewport_span_source: str = "manual-calibration"
     assumes_max_bigmap_zoom: bool = False
+    zoom_status: str = "unknown"
+    zoom_level: str = ""
+    zoom_confidence: float = 0.0
+    overlay_hint: str = ""
 
 
 class MapMaskViewportProvider:
