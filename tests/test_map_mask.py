@@ -191,6 +191,32 @@ class MutablePearPalUserClient:
 
 
 class OfficialPearPalProviderTests(unittest.TestCase):
+    def test_listing_labels_does_not_start_point_loading(self) -> None:
+        client = FakePearPalClient()
+        client.fetch_catalog = Mock(wraps=client.fetch_catalog)
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=client,
+            background=False,
+        )
+
+        labels = provider.list_labels()
+
+        self.assertEqual(len(labels), 4)
+        self.assertEqual(
+            provider.get_data_status()["points_source"],
+            "pearpal-public-idle",
+        )
+        client.fetch_catalog.assert_not_called()
+
+        provider.list_points(label_ids=[])
+
+        client.fetch_catalog.assert_called_once_with("1")
+        self.assertEqual(
+            provider.get_data_status()["points_source"],
+            "pearpal-public-ready",
+        )
+
     def test_loads_supported_collectibles_and_expands_stage_child(self) -> None:
         provider = OfficialPearPalProvider(
             enabled=True,
@@ -441,7 +467,7 @@ class PearPalUserStateTests(unittest.TestCase):
             login_launcher=lambda: credentials,
             login_background=False,
         )
-        provider.list_labels()
+        provider.list_points()
         original_points = provider._points
         original_point_by_id = provider._point_by_id
 

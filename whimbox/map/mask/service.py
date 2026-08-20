@@ -252,6 +252,13 @@ class MapMaskService:
     def get_labels(self) -> list[dict[str, Any]]:
         return [label.to_dict() for label in self._list_labels()]
 
+    def prepare_points(self) -> dict[str, Any]:
+        # An empty selection starts lazy provider loading without building a
+        # response containing every point. Official data loads in its daemon
+        # thread; local data loads synchronously only after explicit use.
+        self._list_points(label_ids=[])
+        return self._get_data_status()
+
     def get_selected_label_ids(self) -> list[str]:
         if self._selected_label_ids is None:
             self._selected_label_ids = [

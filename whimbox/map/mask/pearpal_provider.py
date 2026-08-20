@@ -133,7 +133,6 @@ class OfficialPearPalProvider:
         self._overlay_bigmap_open = False
 
     def list_labels(self) -> list[MapMaskLabel]:
-        self._ensure_load_started()
         return [
             _STAR_LABEL,
             _DEWDROP_LABEL,
