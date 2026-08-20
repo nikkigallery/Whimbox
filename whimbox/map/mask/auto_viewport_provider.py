@@ -35,7 +35,7 @@ _MIRALAND_ZOOM_SCALE_ANCHORS = {
     "max": 0.637,
 }
 _ZOOM_HINT_UNSUPPORTED = "当前地图缩放过小，请点击左下角“+”放大地图"
-_ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，建议将地图调整到最大缩放档位"
+_ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，目前只支持大世界地图，并建议将地图调整到最大缩放档位"
 
 
 @dataclass(frozen=True, slots=True)
