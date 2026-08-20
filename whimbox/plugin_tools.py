@@ -1,3 +1,5 @@
+import hashlib
+import re
 from threading import Event
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
@@ -6,6 +8,29 @@ from pydantic import Field, create_model
 from typing_extensions import Literal
 
 from whimbox.plugins.registry import PluginRegistry
+
+
+_LLM_TOOL_NAME_INVALID_CHARS = re.compile(r"[^a-zA-Z0-9_-]+")
+_LLM_TOOL_NAME_MAX_LENGTH = 64
+
+
+def _build_llm_tool_name(tool_id: str, used_names: set[str]) -> str:
+    """Build a provider-compatible, unique name without changing the tool id."""
+    base_name = _LLM_TOOL_NAME_INVALID_CHARS.sub("_", tool_id).strip("_-") or "tool"
+    candidate = base_name[:_LLM_TOOL_NAME_MAX_LENGTH]
+
+    if candidate in used_names:
+        digest = hashlib.sha1(tool_id.encode("utf-8")).hexdigest()[:8]
+        suffix = f"_{digest}"
+        candidate = f"{base_name[: _LLM_TOOL_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
+        collision_index = 2
+        while candidate in used_names:
+            suffix = f"_{digest}_{collision_index}"
+            candidate = f"{base_name[: _LLM_TOOL_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
+            collision_index += 1
+
+    used_names.add(candidate)
+    return candidate
 
 
 def _json_type_to_py(schema: Dict[str, Any]) -> Type[Any]:
@@ -49,16 +74,20 @@ def build_tools(
     stop_event_getter: Optional[Callable[[], Optional[Event]]] = None,
 ) -> List[StructuredTool]:
     tools: List[StructuredTool] = []
+    used_llm_names: set[str] = set()
     for tool_meta in registry.list_tools():
         tool_id = tool_meta.get("tool_id")
         if not tool_id:
             continue
 
-        name = tool_meta.get("name") or tool_id
-        description = tool_meta.get("description") or ""
+        display_name = str(tool_meta.get("name") or tool_id).strip()
+        llm_name = _build_llm_tool_name(str(tool_id), used_llm_names)
+        description = str(tool_meta.get("description") or "").strip()
+        if display_name and display_name != str(tool_id):
+            description = f"{display_name}。{description}" if description else display_name
         ui_behavior = tool_meta.get("ui_behavior") or "silent"
         input_schema = tool_meta.get("input_schema") or {}
-        model_name = f"Args_{tool_id.replace('.', '_')}"
+        model_name = f"Args_{llm_name.replace('-', '_')}"
         args_schema = _build_args_schema(input_schema, model_name)
 
         def _make_tool_func(target_tool_id: str):
@@ -86,10 +115,14 @@ def build_tools(
         tools.append(
             StructuredTool.from_function(
                 func=tool_func,
-                name=name,
+                name=llm_name,
                 description=description,
                 args_schema=args_schema,
-                metadata={"tool_id": tool_id, "ui_behavior": ui_behavior},
+                metadata={
+                    "tool_id": tool_id,
+                    "display_name": display_name,
+                    "ui_behavior": ui_behavior,
+                },
             )
         )
     return tools

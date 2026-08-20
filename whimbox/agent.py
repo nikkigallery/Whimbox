@@ -227,13 +227,14 @@ class Agent:
 
                 elif event_type == "on_tool_start":
                     active_tool_calls += 1
-                    tool_name = event.get("name", "")
+                    tool_meta = event.get("metadata") or {}
+                    tool_name = tool_meta.get("display_name") or event.get("name", "")
                     if tool_name and tool_name not in tools_used:
                         tools_used.append(tool_name)
                     self._tool_running_sessions.add(session_id)
                     self._current_tool_by_session[session_id] = tool_name
                     if status_callback:
-                        status_callback("on_tool_start", tool_name, event.get("metadata"))
+                        status_callback("on_tool_start", tool_name, tool_meta)
 
                 elif event_type == "on_tool_end":
                     active_tool_calls = max(0, active_tool_calls - 1)

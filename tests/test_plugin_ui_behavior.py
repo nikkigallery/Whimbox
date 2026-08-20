@@ -48,9 +48,33 @@ class PluginUiBehaviorTests(unittest.TestCase):
         tools = build_tools(registry, lambda: "test-session")
 
         self.assertEqual(
-            {"tool_id": "test.lookup", "ui_behavior": "silent"},
+            {
+                "tool_id": "test.lookup",
+                "display_name": "test.lookup",
+                "ui_behavior": "silent",
+            },
             tools[0].metadata,
         )
+
+    def test_langchain_tool_name_is_provider_compatible(self):
+        registry = PluginRegistry()
+        registry.register(
+            tool_id="test.lookup-item",
+            name="查询物品",
+            description="按名称查询物品。",
+            func=_success_tool,
+            input_schema={"type": "object", "properties": {}},
+            output_schema={},
+            plugin_id="test",
+            permissions=[],
+        )
+
+        tool = build_tools(registry, lambda: "test-session")[0]
+
+        self.assertEqual("test_lookup-item", tool.name)
+        self.assertEqual("查询物品。按名称查询物品。", tool.description)
+        self.assertEqual("test.lookup-item", tool.metadata["tool_id"])
+        self.assertEqual("查询物品", tool.metadata["display_name"])
 
     def test_invalid_ui_behavior_is_rejected(self):
         registry = PluginRegistry()
