@@ -321,13 +321,17 @@ def back_to_page_main(timeout=15.0, max_esc=8):
             )
             return False
 
-        itt.wait_until_stable(threshold=0.95)
+        itt.wait_until_stable(threshold=0.97)
         if itt.get_img_existence(IconDungeonFeature):
             itt.key_press(keybind.KEYBIND_BACK)
             itt.delay(0.5)
             wait_until_appear_then_click(ButtonDungeonQuitOK, retry_time=1)
         elif itt.get_img_existence(IconPageMainFeature):
             return True
+        elif itt.get_img_existence(IconClickSkip):
+            itt.key_press(keybind.KEYBIND_INTERACTION)
+        elif itt.get_img_existence(IconSkip):
+            itt.key_press(keybind.KEYBIND_INTERACTION)
         else:
             itt.key_press('esc')
             esc_count += 1
