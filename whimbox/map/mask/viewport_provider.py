@@ -164,7 +164,10 @@ class MapMaskViewportProvider:
         )
         if hybrid.viewport is not None:
             return hybrid
-        if hybrid.source == "matching-rejected":
+        if (
+            hybrid.source == "matching-rejected"
+            or hybrid.zoom_status in {"unsupported", "error"}
+        ):
             return hybrid
 
         fallback = self._manual_with_fallback(map_name=map_name)

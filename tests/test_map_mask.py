@@ -34,7 +34,11 @@ from whimbox.map.mask.pearpal_auth import (
 )
 from whimbox.map.mask.resource_paths import package_map_mask_dir
 from whimbox.map.mask.service import MapMaskService
-from whimbox.map.mask.viewport_provider import ViewportResult, _resolve_viewport_mode
+from whimbox.map.mask.viewport_provider import (
+    MapMaskViewportProvider,
+    ViewportResult,
+    _resolve_viewport_mode,
+)
 
 
 POINT = {
@@ -593,6 +597,25 @@ class BigMapStateProviderTests(unittest.TestCase):
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
+    def test_unsupported_zoom_is_not_replaced_by_manual_fallback(self) -> None:
+        provider = MapMaskViewportProvider()
+        unsupported = ViewportResult(
+            viewport=None,
+            mode="hybrid-auto-center",
+            source="unsupported-bigmap-zoom",
+            zoom_status="unsupported",
+            overlay_hint="请使用左下角缩放按钮",
+        )
+        provider.hybrid_provider = Mock()
+        provider.hybrid_provider.get_viewport.return_value = unsupported
+
+        result = provider.get_viewport(mode="hybrid-auto-center")
+
+        self.assertIs(result, unsupported)
+        self.assertIsNone(result.viewport)
+        self.assertEqual(result.zoom_status, "unsupported")
+        self.assertEqual(result.overlay_hint, "请使用左下角缩放按钮")
+
     def test_miraland_zoom_profiles_use_measured_anchor_scales(self) -> None:
         self.assertAlmostEqual(
             _zoom_scale_for_level("miraland", "second"),
