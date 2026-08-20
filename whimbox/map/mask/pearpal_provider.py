@@ -38,6 +38,8 @@ _STAR_CATALOG_IDS = frozenset({"11", "132", "145", "167", "244"})
 # PearPal groups each region's equivalent inspiration collectible under the
 # dewdrop user-state field.
 _DEWDROP_CATALOG_IDS = frozenset({"12", "133", "146", "168", "245"})
+# Website source merges reading collectible IDs into the user info ``read`` list.
+_READ_CATALOG_IDS = frozenset({"20"})
 _USER_REFRESH_PERIOD_SECONDS = 30.0
 _USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
 _USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
@@ -68,8 +70,12 @@ _BOX_LABEL = MapMaskLabel(
     provider="pearpal",
     default_enabled=True,
 )
-
-
+_READ_LABEL = MapMaskLabel(
+    id="pearpal_read",
+    name="阅读物",
+    provider="pearpal",
+    default_enabled=True,
+)
 class OfficialPearPalProvider:
     """Anonymous PearPal public point provider.
 
@@ -107,7 +113,7 @@ class OfficialPearPalProvider:
         self._points: tuple[MapMaskPoint, ...] = ()
         self._point_by_id: dict[str, MapMaskPoint] = {}
         self._source_ids_by_label: dict[str, frozenset[str]] = {}
-        self._matched_awarded_counts = (0, 0, 0)
+        self._matched_awarded_counts = (0, 0, 0, 0)
         self._credentials: PearPalCredentials | None = None
         self._auth_generation = 0
         self._awarded_state = PearPalAwardedState(frozenset(), frozenset())
@@ -128,7 +134,12 @@ class OfficialPearPalProvider:
 
     def list_labels(self) -> list[MapMaskLabel]:
         self._ensure_load_started()
-        return [_STAR_LABEL, _DEWDROP_LABEL, _BOX_LABEL]
+        return [
+            _STAR_LABEL,
+            _DEWDROP_LABEL,
+            _BOX_LABEL,
+            _READ_LABEL,
+        ]
 
     def list_points(
         self,
@@ -358,7 +369,8 @@ class OfficialPearPalProvider:
                     "refreshed PearPal user collection state: "
                     f"reason={reason}, star={len(awarded_state.star_ids)}, "
                     f"dewdrop={len(awarded_state.dewdrop_ids)}, "
-                    f"box={len(awarded_state.box_ids)}"
+                    f"box={len(awarded_state.box_ids)}, "
+                    f"read={len(awarded_state.read_ids)}"
                 )
         finally:
             with self._lock:
@@ -370,9 +382,12 @@ class OfficialPearPalProvider:
         with self._lock:
             credentials = self._credentials
             awarded = self._awarded_state
-            matched_star, matched_dewdrop, matched_box = (
-                self._matched_awarded_counts
-            )
+            (
+                matched_star,
+                matched_dewdrop,
+                matched_box,
+                matched_read,
+            ) = self._matched_awarded_counts
             next_refresh_in_seconds = 0.0
             if credentials is not None and self._next_refresh_monotonic > 0.0:
                 next_refresh_in_seconds = max(
@@ -396,9 +411,11 @@ class OfficialPearPalProvider:
                 "awarded_star_count": len(awarded.star_ids),
                 "awarded_dewdrop_count": len(awarded.dewdrop_ids),
                 "awarded_box_count": len(awarded.box_ids),
+                "awarded_read_count": len(awarded.read_ids),
                 "matched_awarded_star_count": matched_star,
                 "matched_awarded_dewdrop_count": matched_dewdrop,
                 "matched_awarded_box_count": matched_box,
+                "matched_awarded_read_count": matched_read,
             }
 
     def _login_and_refresh(self, auth_generation: int) -> None:
@@ -456,7 +473,8 @@ class OfficialPearPalProvider:
             "loaded PearPal user collection state: "
             f"star={len(awarded_state.star_ids)}, "
             f"dewdrop={len(awarded_state.dewdrop_ids)}, "
-            f"box={len(awarded_state.box_ids)}"
+            f"box={len(awarded_state.box_ids)}, "
+            f"read={len(awarded_state.read_ids)}"
         )
 
     def _reset_user_state_locked(self) -> None:
@@ -488,6 +506,8 @@ class OfficialPearPalProvider:
             return source_id in awarded_state.box_ids
         if point.label_id == _DEWDROP_LABEL.id:
             return source_id in awarded_state.dewdrop_ids
+        if point.label_id == _READ_LABEL.id:
+            return source_id in awarded_state.read_ids
         return False
 
     def _decorate_point(
@@ -519,6 +539,10 @@ class OfficialPearPalProvider:
             len(
                 self._source_ids_by_label.get(_BOX_LABEL.id, frozenset())
                 & awarded_state.box_ids
+            ),
+            len(
+                self._source_ids_by_label.get(_READ_LABEL.id, frozenset())
+                & awarded_state.read_ids
             ),
         )
 
@@ -552,6 +576,7 @@ class OfficialPearPalProvider:
             _STAR_LABEL.id: set(),
             _DEWDROP_LABEL.id: set(),
             _BOX_LABEL.id: set(),
+            _READ_LABEL.id: set(),
         }
         for point in point_by_id.values():
             source_id = str(point.detail.get("source_id") or "")
@@ -570,9 +595,11 @@ class OfficialPearPalProvider:
         star_count = sum(point.label_id == _STAR_LABEL.id for point in points)
         dewdrop_count = sum(point.label_id == _DEWDROP_LABEL.id for point in points)
         box_count = sum(point.label_id == _BOX_LABEL.id for point in points)
+        read_count = sum(point.label_id == _READ_LABEL.id for point in points)
         logger.info(
             "loaded anonymous PearPal map points: "
             f"star={star_count}, dewdrop={dewdrop_count}, box={box_count}, "
+            f"read={read_count}, "
             f"total={len(point_by_id)}"
         )
 
@@ -607,6 +634,8 @@ class OfficialPearPalProvider:
                 label = _DEWDROP_LABEL
             elif catalog_id in box_catalog_ids:
                 label = _BOX_LABEL
+            elif catalog_id in _READ_CATALOG_IDS:
+                label = _READ_LABEL
             else:
                 continue
             world_id = str(spawner_world_id(raw) or _WORLD_ID)

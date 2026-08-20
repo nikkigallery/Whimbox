@@ -45,6 +45,7 @@ class PearPalAwardedState:
     star_ids: frozenset[str]
     box_ids: frozenset[str]
     dewdrop_ids: frozenset[str] = frozenset()
+    read_ids: frozenset[str] = frozenset()
 
 
 class PearPalUserClient:
@@ -109,6 +110,7 @@ def decode_user_info(payload: Any) -> PearPalAwardedState:
         star_ids=_decode_id_set(data.get("star"), "star"),
         box_ids=_decode_id_set(data.get("box"), "box"),
         dewdrop_ids=_decode_id_set(data.get("dewdrop"), "dewdrop"),
+        read_ids=_decode_id_set(data.get("read"), "read"),
     )
 
 

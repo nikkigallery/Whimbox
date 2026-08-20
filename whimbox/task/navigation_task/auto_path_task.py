@@ -237,6 +237,7 @@ class AutoPathTask(TaskTemplate):
             ACTION_FISHING_STAR: ABILITY_NAME_STAR_COLLECT,
             ACTION_BIG: ABILITY_NAME_BIG,
             ACTION_SHAPESHIFTING: ABILITY_NAME_SHAPESHIFTING,
+            ACTION_MACHINE: ABILITY_NAME_MACHINE,
         }
         need_ability_set = set()
         for point in self.path_points:
@@ -471,6 +472,11 @@ class AutoPathTask(TaskTemplate):
                     else:
                         self.log_to_gui("测试跑图路线中，不进行钓星")
                         time.sleep(2)
+                elif self.target_point.action == ACTION_MACHINE:
+                    from whimbox.action.machine import MachineTask
+                    mode = self.target_point.action_params
+                    machine_task = MachineTask(session_id=self.session_id, mode=mode)
+                    task_result = machine_task.task_run()
                 elif self.target_point.action == ACTION_BIG:
                     from whimbox.action.big import BigTask
                     big_task = BigTask(session_id=self.session_id)

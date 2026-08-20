@@ -124,6 +124,13 @@ class FakePearPalClient:
                             {"id": 13, "name": "普通宝箱", "icon": "box.png"},
                         ],
                     },
+                    {
+                        "id": 15,
+                        "name": "任务活动",
+                        "catalogs": [
+                            {"id": 20, "name": "阅读物", "icon": "read.png"},
+                        ],
+                    },
                 ]
             }
         }, None
@@ -132,6 +139,7 @@ class FakePearPalClient:
         return [
             {"id": 100, "world_id": 1, "catalog": 11, "x": 100, "y": 200},
             {"id": 101, "world_id": 1, "catalog": 12, "x": 150, "y": 250},
+            {"id": 102, "world_id": 1, "catalog": 20, "x": 200, "y": 300},
             {
                 "id": 200,
                 "world_id": 1,
@@ -159,6 +167,7 @@ class FakePearPalUserClient:
             star_ids=frozenset({"100"}),
             box_ids=frozenset(),
             dewdrop_ids=frozenset({"101"}),
+            read_ids=frozenset({"102"}),
         )
 
 
@@ -182,7 +191,7 @@ class MutablePearPalUserClient:
 
 
 class OfficialPearPalProviderTests(unittest.TestCase):
-    def test_loads_star_box_and_expands_stage_child(self) -> None:
+    def test_loads_supported_collectibles_and_expands_stage_child(self) -> None:
         provider = OfficialPearPalProvider(
             enabled=True,
             client=FakePearPalClient(),
@@ -195,9 +204,22 @@ class OfficialPearPalProviderTests(unittest.TestCase):
 
         self.assertEqual(
             [label.id for label in labels],
-            ["pearpal_star", "pearpal_dewdrop", "pearpal_box"],
+            [
+                "pearpal_star",
+                "pearpal_dewdrop",
+                "pearpal_box",
+                "pearpal_read",
+            ],
         )
-        self.assertEqual(set(point_by_id), {"pearpal:100", "pearpal:101", "pearpal:201"})
+        self.assertEqual(
+            set(point_by_id),
+            {
+                "pearpal:100",
+                "pearpal:101",
+                "pearpal:102",
+                "pearpal:201",
+            },
+        )
         self.assertEqual(point_by_id["pearpal:100"].label_id, "pearpal_star")
         self.assertAlmostEqual(
             point_by_id["pearpal:100"].image_x,
@@ -211,6 +233,7 @@ class OfficialPearPalProviderTests(unittest.TestCase):
         self.assertEqual(dewdrop.label_id, "pearpal_dewdrop")
         self.assertAlmostEqual(dewdrop.image_x, 3.3333333333333335)
         self.assertAlmostEqual(dewdrop.image_y, 5.555555555555555)
+        self.assertEqual(point_by_id["pearpal:102"].label_id, "pearpal_read")
         stage_box = point_by_id["pearpal:201"]
         self.assertEqual(stage_box.label_id, "pearpal_box")
         self.assertAlmostEqual(stage_box.image_x, 6.666666666666667)
@@ -290,6 +313,7 @@ class PearPalUserStateTests(unittest.TestCase):
                     "star": [100, "101", None],
                     "box": [201, 202],
                     "dewdrop": [301, 302],
+                    "read": [401, 402],
                 },
             }
         )
@@ -299,6 +323,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertEqual(awarded.star_ids, frozenset({"100", "101"}))
         self.assertEqual(awarded.box_ids, frozenset({"201", "202"}))
         self.assertEqual(awarded.dewdrop_ids, frozenset({"301", "302"}))
+        self.assertEqual(awarded.read_ids, frozenset({"401", "402"}))
 
     def test_login_filters_awarded_points_and_can_show_them(self) -> None:
         credentials = PearPalCredentials(
@@ -315,7 +340,12 @@ class PearPalUserStateTests(unittest.TestCase):
         )
         self.assertEqual(
             {point.id for point in provider.list_points()},
-            {"pearpal:100", "pearpal:101", "pearpal:201"},
+            {
+                "pearpal:100",
+                "pearpal:101",
+                "pearpal:102",
+                "pearpal:201",
+            },
         )
 
         status = provider.start_login()
@@ -323,6 +353,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertTrue(status["authenticated"])
         self.assertEqual(status["matched_awarded_star_count"], 1)
         self.assertEqual(status["matched_awarded_dewdrop_count"], 1)
+        self.assertEqual(status["matched_awarded_read_count"], 1)
         self.assertEqual(
             [point.id for point in provider.list_points()],
             ["pearpal:201"],
@@ -332,7 +363,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertTrue(star["detail"]["awarded"])
         self.assertFalse(star["detail"]["anonymous"])
         provider.disconnect_user()
-        self.assertEqual(len(provider.list_points()), 3)
+        self.assertEqual(len(provider.list_points()), 4)
 
     def test_clear_login_information_removes_session_and_webview_storage(self) -> None:
         credentials = PearPalCredentials(
@@ -358,7 +389,7 @@ class PearPalUserStateTests(unittest.TestCase):
         clear_storage.assert_called_once_with()
         self.assertFalse(status["authenticated"])
         self.assertEqual(status["auth_state"], "anonymous")
-        self.assertEqual(len(provider.list_points()), 3)
+        self.assertEqual(len(provider.list_points()), 4)
 
     def test_clear_login_information_invalidates_in_flight_login(self) -> None:
         credentials = PearPalCredentials(
@@ -468,7 +499,11 @@ class PearPalUserStateTests(unittest.TestCase):
             )
             self.assertEqual(
                 {point.id for point in provider.list_points()},
-                {"pearpal:100", "pearpal:101"},
+                {
+                    "pearpal:100",
+                    "pearpal:101",
+                    "pearpal:102",
+                },
             )
 
             clock[0] = 137.0
