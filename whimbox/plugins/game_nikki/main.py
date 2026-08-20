@@ -311,7 +311,7 @@ def run_xinghai(session_id: str, input: Dict[str, Any], context: Dict[str, Any])
 
 @_with_game_check
 def run_mira_crown(session_id: str, input: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    return TaskAdapter.run(MiraCrownTask, session_id, {"force_start": True}, context)
+    return TaskAdapter.run(MiraCrownTask, session_id, input, context)
 
 
 @_with_game_check
