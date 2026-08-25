@@ -6,9 +6,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from .pearpal_regions import get_pearpal_region
 
-_USER_INFO_URL = "https://myl-api.nuanpaper.com/v1/strategy/map/user/info"
-_DEFAULT_CLIENT_ID = 1106
 _MAX_USER_INFO_BYTES = 4 * 1024 * 1024
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{8,512}$")
 _OPENID_PATTERN = re.compile(r"^\d{1,32}$")
@@ -39,8 +38,11 @@ class PearPalAwardedState:
 
 
 class PearPalUserClient:
-    def __init__(self, *, client_id: int = _DEFAULT_CLIENT_ID) -> None:
-        self.client_id = int(client_id)
+    def __init__(self, *, region: str = "cn", client_id: int | None = None) -> None:
+        region_config = get_pearpal_region(region)
+        self.region = region_config.name
+        self.user_info_url = region_config.user_info_url
+        self.client_id = int(client_id or region_config.client_id)
 
     def fetch_awarded_state(
         self,
@@ -55,7 +57,7 @@ class PearPalUserClient:
             separators=(",", ":"),
         ).encode("utf-8")
         request = urllib.request.Request(
-            _USER_INFO_URL,
+            self.user_info_url,
             data=body,
             headers={
                 "Accept": "application/json",
@@ -66,7 +68,7 @@ class PearPalUserClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                if response.geturl() != _USER_INFO_URL:
+                if response.geturl() != self.user_info_url:
                     raise PearPalAuthError("user info request was redirected")
                 content_length = response.headers.get("Content-Length")
                 if content_length and int(content_length) > _MAX_USER_INFO_BYTES:

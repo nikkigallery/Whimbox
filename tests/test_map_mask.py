@@ -29,6 +29,7 @@ from whimbox.map.mask.pearpal_provider import OfficialPearPalProvider
 from whimbox.map.mask.pearpal_auth import (
     PearPalAwardedState,
     PearPalCredentials,
+    PearPalUserClient,
     decode_user_info,
     parse_login_storage,
 )
@@ -324,6 +325,21 @@ class OfficialPearPalProviderTests(unittest.TestCase):
 
 
 class PearPalUserStateTests(unittest.TestCase):
+    def test_user_client_uses_region_specific_api_and_client_id(self) -> None:
+        cn_client = PearPalUserClient(region="cn")
+        oversea_client = PearPalUserClient(region="oversea")
+
+        self.assertEqual(cn_client.client_id, 1106)
+        self.assertEqual(
+            cn_client.user_info_url,
+            "https://myl-api.nuanpaper.com/v1/strategy/map/user/info",
+        )
+        self.assertEqual(oversea_client.client_id, 1116)
+        self.assertEqual(
+            oversea_client.user_info_url,
+            "https://pearpal-api.infoldgames.com/v1/strategy/map/user/info",
+        )
+
     def test_parses_login_storage_and_user_info_ids(self) -> None:
         credentials = parse_login_storage(
             '{"token":"abcDEF0123456789","time":1786062221854}',
@@ -386,6 +402,34 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertFalse(star["detail"]["anonymous"])
         provider.disconnect_user()
         self.assertEqual(len(provider.list_points()), 4)
+
+    def test_switching_region_resets_login_and_reloads_public_points(self) -> None:
+        credentials = PearPalCredentials(
+            token="abcDEF0123456789",
+            openid="12405094",
+        )
+        client = FakePearPalClient()
+        client.fetch_catalog = Mock(wraps=client.fetch_catalog)
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=client,
+            background=False,
+            user_client=FakePearPalUserClient(),
+            auth_background=False,
+        )
+        provider.list_points()
+        provider.authenticate(credentials)
+
+        status = provider.set_region("oversea")
+
+        self.assertEqual(status["region"], "oversea")
+        self.assertFalse(status["authenticated"])
+        self.assertEqual(
+            provider.get_data_status()["points_source"],
+            "pearpal-public-idle",
+        )
+        self.assertEqual(len(provider.list_points()), 4)
+        self.assertEqual(client.fetch_catalog.call_count, 2)
 
     def test_clear_login_information_removes_backend_session(self) -> None:
         credentials = PearPalCredentials(

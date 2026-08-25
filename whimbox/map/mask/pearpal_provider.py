@@ -23,6 +23,7 @@ from .pearpal_debug import (
     spawner_stage_id,
     spawner_world_id,
 )
+from .pearpal_regions import normalize_pearpal_region
 
 
 _WORLD_ID = "1"
@@ -91,18 +92,26 @@ class OfficialPearPalProvider:
         client: Any | None = None,
         background: bool = True,
         language: str = "zh-cn",
+        region: str = "cn",
         user_client: Any | None = None,
         auth_background: bool = True,
         refresh_background: bool = True,
     ) -> None:
         self.enabled = enabled
-        self._client = client or PearPalPublicDebugClient(language=language)
         self._background = background
         self._refresh_background = refresh_background
         self._language = language
         self._lock = threading.RLock()
-        self._user_client = user_client or PearPalUserClient()
+        self._client_override = client
+        self._user_client_override = user_client
+        self._region = normalize_pearpal_region(region)
+        self._client = client or PearPalPublicDebugClient(
+            region=self._region,
+            language=language,
+        )
+        self._user_client = user_client or PearPalUserClient(region=self._region)
         self._auth_background = auth_background
+        self._data_generation = 0
         self._load_state = "idle"
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
@@ -197,8 +206,6 @@ class OfficialPearPalProvider:
         if not self.enabled:
             raise RuntimeError("OfficialPearPalProvider is disabled")
         with self._lock:
-            if self._auth_thread is not None:
-                return self.get_user_status()
             self._auth_generation += 1
             auth_generation = self._auth_generation
             self._reset_user_state_locked()
@@ -218,6 +225,29 @@ class OfficialPearPalProvider:
             self._authenticate_and_refresh(credentials, auth_generation)
         else:
             thread.start()
+        return self.get_user_status()
+
+    def set_region(self, region: str) -> dict[str, Any]:
+        normalized = normalize_pearpal_region(region)
+        with self._lock:
+            if normalized == self._region:
+                return self.get_user_status()
+            self._auth_generation += 1
+            self._data_generation += 1
+            self._region = normalized
+            self._client = self._client_override or PearPalPublicDebugClient(
+                region=normalized,
+                language=self._language,
+            )
+            self._user_client = self._user_client_override or PearPalUserClient(
+                region=normalized
+            )
+            self._load_state = "idle"
+            self._load_error = ""
+            self._points = ()
+            self._point_by_id = {}
+            self._source_ids_by_label = {}
+            self._reset_user_state_locked()
         return self.get_user_status()
 
     def disconnect_user(self) -> dict[str, Any]:
@@ -390,6 +420,7 @@ class OfficialPearPalProvider:
                     self._next_refresh_monotonic - time.monotonic(),
                 )
             return {
+                "region": self._region,
                 "auth_state": self._auth_state,
                 "authenticated": credentials is not None,
                 "anonymous": credentials is None,
@@ -541,23 +572,31 @@ class OfficialPearPalProvider:
             if self._load_state != "idle":
                 return
             self._load_state = "loading"
+            data_generation = self._data_generation
+            client = self._client
         if not self._background:
-            self._load()
+            self._load(data_generation, client)
             return
         threading.Thread(
             target=self._load,
+            args=(data_generation, client),
             name="map-mask-pearpal-load",
             daemon=True,
         ).start()
 
-    def _load(self) -> None:
+    def _load(self, data_generation: int, client: Any) -> None:
         try:
-            points = self._fetch_points()
+            points = self._fetch_points(client)
         except Exception as exc:  # noqa: BLE001
             with self._lock:
+                if self._data_generation != data_generation:
+                    return
                 self._load_state = "error"
                 self._load_error = str(exc)
-            logger.warning(f"failed to load anonymous PearPal map points: {exc}")
+                region = self._region
+            logger.warning(
+                f"failed to load anonymous PearPal map points: region={region}, {exc}"
+            )
             return
         point_by_id = {point.id: point for point in points}
         source_ids_by_label: dict[str, set[str]] = {
@@ -571,6 +610,8 @@ class OfficialPearPalProvider:
             if source_id and point.label_id in source_ids_by_label:
                 source_ids_by_label[point.label_id].add(source_id)
         with self._lock:
+            if self._data_generation != data_generation:
+                return
             self._points = tuple(point_by_id.values())
             self._point_by_id = point_by_id
             self._source_ids_by_label = {
@@ -580,21 +621,23 @@ class OfficialPearPalProvider:
             self._set_awarded_state_locked(self._awarded_state)
             self._load_state = "ready"
             self._load_error = ""
+            region = self._region
         star_count = sum(point.label_id == _STAR_LABEL.id for point in points)
         dewdrop_count = sum(point.label_id == _DEWDROP_LABEL.id for point in points)
         box_count = sum(point.label_id == _BOX_LABEL.id for point in points)
         read_count = sum(point.label_id == _READ_LABEL.id for point in points)
         logger.info(
             "loaded anonymous PearPal map points: "
-            f"star={star_count}, dewdrop={dewdrop_count}, box={box_count}, "
+            f"region={region}, star={star_count}, dewdrop={dewdrop_count}, "
+            f"box={box_count}, "
             f"read={read_count}, "
             f"total={len(point_by_id)}"
         )
 
-    def _fetch_points(self) -> list[MapMaskPoint]:
-        catalog_response, _ = self._client.fetch_catalog(_WORLD_ID)
-        base_spawners, _ = self._client.fetch_spawners(_WORLD_ID)
-        stage_spawners, _ = self._client.fetch_stage_spawners()
+    def _fetch_points(self, client: Any) -> list[MapMaskPoint]:
+        catalog_response, _ = client.fetch_catalog(_WORLD_ID)
+        base_spawners, _ = client.fetch_spawners(_WORLD_ID)
+        stage_spawners, _ = client.fetch_stage_spawners()
         spawners, _ = expand_stage_spawners(base_spawners, stage_spawners)
 
         catalogs = flatten_catalogs(catalog_response, self._language)

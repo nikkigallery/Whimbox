@@ -233,8 +233,14 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "map_mask.get_user_status":
         return map_mask_service.get_user_status()
 
+    if method == "map_mask.set_pearpal_region":
+        return map_mask_service.set_pearpal_region(
+            _parse_optional_string(params.get("region")) or "cn"
+        )
+
     if method == "map_mask.submit_pearpal_login":
         return map_mask_service.submit_pearpal_login(
+            _parse_optional_string(params.get("region")) or "cn",
             params.get("momo_token"),
             params.get("momo_nid"),
         )
@@ -246,7 +252,9 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         return map_mask_service.disconnect_pearpal_user()
 
     if method == "map_mask.clear_pearpal_login":
-        return map_mask_service.clear_pearpal_login_information()
+        return map_mask_service.clear_pearpal_login_information(
+            _parse_optional_string(params.get("region")) or "cn"
+        )
 
     if method == "map_mask.set_hide_awarded":
         return map_mask_service.set_hide_awarded(

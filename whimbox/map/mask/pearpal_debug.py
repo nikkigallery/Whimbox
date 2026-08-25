@@ -17,6 +17,8 @@ from typing import Any
 
 import numpy as np
 
+from .pearpal_regions import REGIONS
+
 
 USER_AGENT = "Whimbox-PearPal-Public-Debug/1.0"
 MAX_JSON_RESPONSE_BYTES = 32 * 1024 * 1024
@@ -95,33 +97,6 @@ PUBLIC_STAGE_SPAWNER_FIELDS = {
     "catalog",
     "description",
     "tag",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class PearPalRegion:
-    name: str
-    page_url: str
-    api_base: str
-    asset_base: str
-    client_name: str
-
-
-REGIONS = {
-    "cn": PearPalRegion(
-        name="cn",
-        page_url="https://myl.nuanpaper.com/tools/map",
-        api_base="https://myl-api.nuanpaper.com",
-        asset_base="https://assets.papegames.com",
-        client_name="nikki5CN",
-    ),
-    "oversea": PearPalRegion(
-        name="oversea",
-        page_url="https://pearpal.infoldgames.com/tools/map",
-        api_base="https://pearpal-api.infoldgames.com",
-        asset_base="https://assets.infoldgames.com",
-        client_name="nikki5Other",
-    ),
 }
 
 

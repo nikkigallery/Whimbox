@@ -309,11 +309,16 @@ class MapMaskService:
     def get_user_status(self) -> dict[str, Any]:
         return self.official_provider.get_user_status()
 
+    def set_pearpal_region(self, region: str) -> dict[str, Any]:
+        return self.official_provider.set_region(region)
+
     def submit_pearpal_login(
         self,
+        region: str,
         momo_token: Any,
         momo_nid: Any,
     ) -> dict[str, Any]:
+        self.official_provider.set_region(region)
         credentials = parse_login_storage(momo_token, momo_nid)
         return self.official_provider.authenticate(credentials)
 
@@ -323,7 +328,8 @@ class MapMaskService:
     def disconnect_pearpal_user(self) -> dict[str, Any]:
         return self.official_provider.disconnect_user()
 
-    def clear_pearpal_login_information(self) -> dict[str, Any]:
+    def clear_pearpal_login_information(self, region: str) -> dict[str, Any]:
+        self.official_provider.set_region(region)
         return self.official_provider.clear_login_information()
 
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
