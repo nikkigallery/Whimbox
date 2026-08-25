@@ -4,17 +4,14 @@ import math
 import threading
 import time
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any
 
 from whimbox.common.logger import logger
 
 from .pearpal_auth import (
     PearPalAwardedState,
     PearPalCredentials,
-    PearPalLoginCancelled,
     PearPalUserClient,
-    clear_webview_login_storage,
-    launch_login_webview,
 )
 from .models import MapMaskLabel, MapMaskPoint
 from .pearpal_debug import (
@@ -81,8 +78,8 @@ class OfficialPearPalProvider:
 
     Loading starts lazily on the first overlay request. Production callers use
     a daemon thread so public API latency never blocks the 50 ms overlay poll.
-    Authentication runs in an isolated Python WebView process; only the backend
-    receives credentials and applies per-user awarded-state filtering.
+    Electron owns the isolated login window and forwards the Local Storage
+    values directly to the backend for validation and awarded-state filtering.
     """
 
     name = "pearpal"
@@ -95,8 +92,7 @@ class OfficialPearPalProvider:
         background: bool = True,
         language: str = "zh-cn",
         user_client: Any | None = None,
-        login_launcher: Callable[[], PearPalCredentials] | None = None,
-        login_background: bool = True,
+        auth_background: bool = True,
         refresh_background: bool = True,
     ) -> None:
         self.enabled = enabled
@@ -106,8 +102,7 @@ class OfficialPearPalProvider:
         self._language = language
         self._lock = threading.RLock()
         self._user_client = user_client or PearPalUserClient()
-        self._login_launcher = login_launcher or launch_login_webview
-        self._login_background = login_background
+        self._auth_background = auth_background
         self._load_state = "idle"
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
@@ -120,7 +115,7 @@ class OfficialPearPalProvider:
         self._auth_state = "anonymous"
         self._auth_error = ""
         self._hide_awarded = True
-        self._login_thread: threading.Thread | None = None
+        self._auth_thread: threading.Thread | None = None
         self._refresh_thread: threading.Thread | None = None
         self._refreshing = False
         self._refresh_error = ""
@@ -198,27 +193,29 @@ class OfficialPearPalProvider:
             **user_status,
         }
 
-    def start_login(self) -> dict[str, Any]:
+    def authenticate(self, credentials: PearPalCredentials) -> dict[str, Any]:
         if not self.enabled:
             raise RuntimeError("OfficialPearPalProvider is disabled")
         with self._lock:
-            if self._login_thread is not None:
+            if self._auth_thread is not None:
                 return self.get_user_status()
+            self._auth_generation += 1
             auth_generation = self._auth_generation
-            self._auth_state = "opening-login"
+            self._reset_user_state_locked()
+            self._auth_state = "loading-user-state"
             self._auth_error = ""
-            if self._login_background:
+            if self._auth_background:
                 thread = threading.Thread(
-                    target=self._login_and_refresh,
-                    args=(auth_generation,),
-                    name="map-mask-pearpal-login",
+                    target=self._authenticate_and_refresh,
+                    args=(credentials, auth_generation),
+                    name="map-mask-pearpal-auth",
                     daemon=True,
                 )
-                self._login_thread = thread
+                self._auth_thread = thread
             else:
                 thread = None
         if thread is None:
-            self._login_and_refresh(auth_generation)
+            self._authenticate_and_refresh(credentials, auth_generation)
         else:
             thread.start()
         return self.get_user_status()
@@ -233,7 +230,6 @@ class OfficialPearPalProvider:
         with self._lock:
             self._auth_generation += 1
             self._reset_user_state_locked()
-        clear_webview_login_storage()
         return self.get_user_status()
 
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
@@ -417,20 +413,13 @@ class OfficialPearPalProvider:
                 "matched_awarded_read_count": matched_read,
             }
 
-    def _login_and_refresh(self, auth_generation: int) -> None:
+    def _authenticate_and_refresh(
+        self,
+        credentials: PearPalCredentials,
+        auth_generation: int,
+    ) -> None:
         try:
-            credentials = self._login_launcher()
-            with self._lock:
-                if self._auth_generation != auth_generation:
-                    return
-                self._auth_state = "loading-user-state"
             awarded_state = self._user_client.fetch_awarded_state(credentials)
-        except PearPalLoginCancelled:
-            with self._lock:
-                if self._auth_generation == auth_generation:
-                    self._auth_state = "cancelled"
-                    self._auth_error = ""
-            return
         except Exception as exc:  # noqa: BLE001
             with self._lock:
                 is_current_login = self._auth_generation == auth_generation
@@ -445,8 +434,8 @@ class OfficialPearPalProvider:
             return
         finally:
             with self._lock:
-                if self._login_thread is threading.current_thread():
-                    self._login_thread = None
+                if self._auth_thread is threading.current_thread():
+                    self._auth_thread = None
         now = time.monotonic()
         with self._lock:
             if self._auth_generation != auth_generation:

@@ -30,7 +30,7 @@ from whimbox.map.mask.pearpal_auth import (
     PearPalAwardedState,
     PearPalCredentials,
     decode_user_info,
-    parse_webview_login,
+    parse_login_storage,
 )
 from whimbox.map.mask.resource_paths import package_map_mask_dir
 from whimbox.map.mask.service import MapMaskService
@@ -325,12 +325,9 @@ class OfficialPearPalProviderTests(unittest.TestCase):
 
 class PearPalUserStateTests(unittest.TestCase):
     def test_parses_login_storage_and_user_info_ids(self) -> None:
-        credentials = parse_webview_login(
-            {
-                "status": "ok",
-                "momoToken": '{"token":"abcDEF0123456789","time":1786062221854}',
-                "momoNid": '"12405094"',
-            }
+        credentials = parse_login_storage(
+            '{"token":"abcDEF0123456789","time":1786062221854}',
+            '"12405094"',
         )
         awarded = decode_user_info(
             {
@@ -361,8 +358,7 @@ class PearPalUserStateTests(unittest.TestCase):
             client=FakePearPalClient(),
             background=False,
             user_client=FakePearPalUserClient(),
-            login_launcher=lambda: credentials,
-            login_background=False,
+            auth_background=False,
         )
         self.assertEqual(
             {point.id for point in provider.list_points()},
@@ -374,7 +370,7 @@ class PearPalUserStateTests(unittest.TestCase):
             },
         )
 
-        status = provider.start_login()
+        status = provider.authenticate(credentials)
 
         self.assertTrue(status["authenticated"])
         self.assertEqual(status["matched_awarded_star_count"], 1)
@@ -391,7 +387,7 @@ class PearPalUserStateTests(unittest.TestCase):
         provider.disconnect_user()
         self.assertEqual(len(provider.list_points()), 4)
 
-    def test_clear_login_information_removes_session_and_webview_storage(self) -> None:
+    def test_clear_login_information_removes_backend_session(self) -> None:
         credentials = PearPalCredentials(
             token="abcDEF0123456789",
             openid="12405094",
@@ -401,18 +397,12 @@ class PearPalUserStateTests(unittest.TestCase):
             client=FakePearPalClient(),
             background=False,
             user_client=FakePearPalUserClient(),
-            login_launcher=lambda: credentials,
-            login_background=False,
+            auth_background=False,
         )
         provider.list_points()
-        self.assertTrue(provider.start_login()["authenticated"])
+        self.assertTrue(provider.authenticate(credentials)["authenticated"])
 
-        with patch(
-            "whimbox.map.mask.pearpal_provider.clear_webview_login_storage"
-        ) as clear_storage:
-            status = provider.clear_login_information()
-
-        clear_storage.assert_called_once_with()
+        status = provider.clear_login_information()
         self.assertFalse(status["authenticated"])
         self.assertEqual(status["auth_state"], "anonymous")
         self.assertEqual(len(provider.list_points()), 4)
@@ -422,33 +412,30 @@ class PearPalUserStateTests(unittest.TestCase):
             token="abcDEF0123456789",
             openid="12405094",
         )
-        login_started = threading.Event()
-        release_login = threading.Event()
+        auth_started = threading.Event()
+        release_auth = threading.Event()
 
-        def delayed_login() -> PearPalCredentials:
-            login_started.set()
-            release_login.wait(timeout=2.0)
-            return credentials
+        class DelayedPearPalUserClient:
+            def fetch_awarded_state(self, received: PearPalCredentials):
+                auth_started.set()
+                release_auth.wait(timeout=2.0)
+                return FakePearPalUserClient().fetch_awarded_state(received)
 
         provider = OfficialPearPalProvider(
             enabled=True,
             client=FakePearPalClient(),
             background=False,
-            user_client=FakePearPalUserClient(),
-            login_launcher=delayed_login,
-            login_background=True,
+            user_client=DelayedPearPalUserClient(),
+            auth_background=True,
         )
 
-        provider.start_login()
-        self.assertTrue(login_started.wait(timeout=1.0))
-        with patch(
-            "whimbox.map.mask.pearpal_provider.clear_webview_login_storage"
-        ):
-            provider.clear_login_information()
-        release_login.set()
-        login_thread = provider._login_thread
-        if login_thread is not None:
-            login_thread.join(timeout=2.0)
+        provider.authenticate(credentials)
+        self.assertTrue(auth_started.wait(timeout=1.0))
+        provider.clear_login_information()
+        release_auth.set()
+        auth_thread = provider._auth_thread
+        if auth_thread is not None:
+            auth_thread.join(timeout=2.0)
 
         status = provider.get_user_status()
         self.assertFalse(status["authenticated"])
@@ -464,14 +451,13 @@ class PearPalUserStateTests(unittest.TestCase):
             client=FakePearPalClient(),
             background=False,
             user_client=FakePearPalUserClient(),
-            login_launcher=lambda: credentials,
-            login_background=False,
+            auth_background=False,
         )
         provider.list_points()
         original_points = provider._points
         original_point_by_id = provider._point_by_id
 
-        provider.start_login()
+        provider.authenticate(credentials)
         provider.list_points()
         provider.get_user_status()
         self.assertIs(provider._points, original_points)
@@ -496,8 +482,7 @@ class PearPalUserStateTests(unittest.TestCase):
             client=FakePearPalClient(),
             background=False,
             user_client=user_client,
-            login_launcher=lambda: credentials,
-            login_background=False,
+            auth_background=False,
             refresh_background=False,
         )
 
@@ -506,7 +491,7 @@ class PearPalUserStateTests(unittest.TestCase):
             side_effect=lambda: clock[0],
         ):
             provider.list_points()
-            login_status = provider.start_login()
+            login_status = provider.authenticate(credentials)
             self.assertEqual(user_client.calls, 1)
             self.assertEqual(login_status["last_refresh_reason"], "login")
 

@@ -13,6 +13,7 @@ from .coordinate import point_to_visible
 from .local_provider import LocalJsonProvider
 from .models import MapMaskLabel, MapMaskState, MapMaskViewport
 from .mouse_wheel_guard import MouseWheelGuard
+from .pearpal_auth import parse_login_storage
 from .pearpal_provider import OfficialPearPalProvider
 from .provider import MapMaskProvider
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
@@ -308,8 +309,13 @@ class MapMaskService:
     def get_user_status(self) -> dict[str, Any]:
         return self.official_provider.get_user_status()
 
-    def start_pearpal_login(self) -> dict[str, Any]:
-        return self.official_provider.start_login()
+    def submit_pearpal_login(
+        self,
+        momo_token: Any,
+        momo_nid: Any,
+    ) -> dict[str, Any]:
+        credentials = parse_login_storage(momo_token, momo_nid)
+        return self.official_provider.authenticate(credentials)
 
     def refresh_pearpal_user_state(self) -> dict[str, Any]:
         return self.official_provider.refresh_user_state()

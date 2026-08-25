@@ -39,7 +39,6 @@ dependencies = [
     "scipy==1.16.2",
     "watchdog==6.0.0",
     "win10toast==0.9; sys_platform == 'win32'",
-    "pywebview>=5.4,<7; sys_platform == 'win32'",
     # Cross-platform screen capture (used on macOS)
     "mss>=9.0; sys_platform == 'darwin'",
     # macOS AppKit / Quartz bindings (no-op install on non-Apple platforms)

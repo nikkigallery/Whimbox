@@ -233,8 +233,11 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "map_mask.get_user_status":
         return map_mask_service.get_user_status()
 
-    if method == "map_mask.start_pearpal_login":
-        return map_mask_service.start_pearpal_login()
+    if method == "map_mask.submit_pearpal_login":
+        return map_mask_service.submit_pearpal_login(
+            params.get("momo_token"),
+            params.get("momo_nid"),
+        )
 
     if method == "map_mask.refresh_pearpal_user_state":
         return map_mask_service.refresh_pearpal_user_state()

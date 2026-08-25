@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import shutil
-import subprocess
-import sys
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 
-_LOGIN_URL = "https://myl.nuanpaper.com/tools/map"
 _USER_INFO_URL = "https://myl-api.nuanpaper.com/v1/strategy/map/user/info"
 _DEFAULT_CLIENT_ID = 1106
 _MAX_USER_INFO_BYTES = 4 * 1024 * 1024
@@ -21,10 +15,6 @@ _OPENID_PATTERN = re.compile(r"^\d{1,32}$")
 
 
 class PearPalAuthError(RuntimeError):
-    pass
-
-
-class PearPalLoginCancelled(PearPalAuthError):
     pass
 
 
@@ -114,16 +104,8 @@ def decode_user_info(payload: Any) -> PearPalAwardedState:
     )
 
 
-def parse_webview_login(payload: Any) -> PearPalCredentials:
-    if not isinstance(payload, dict):
-        raise PearPalAuthError("login WebView returned an invalid result")
-    status = str(payload.get("status") or "")
-    if status == "cancelled":
-        raise PearPalLoginCancelled("login window was closed")
-    if status != "ok":
-        raise PearPalAuthError(str(payload.get("error") or "login WebView failed"))
-
-    raw_token = payload.get("momoToken")
+def parse_login_storage(momo_token: Any, momo_nid: Any) -> PearPalCredentials:
+    raw_token = momo_token
     if not isinstance(raw_token, str):
         raise PearPalAuthError("momoToken is missing from Local Storage")
     try:
@@ -134,7 +116,7 @@ def parse_webview_login(payload: Any) -> PearPalCredentials:
     if not isinstance(token, str) or not _TOKEN_PATTERN.fullmatch(token):
         raise PearPalAuthError("momoToken.token has an invalid format")
 
-    openid = _parse_momo_nid(payload.get("momoNid"))
+    openid = _parse_momo_nid(momo_nid)
     return PearPalCredentials(token=token, openid=openid)
 
 
@@ -166,56 +148,6 @@ def _parse_momo_nid(value: Any) -> str:
     return openid
 
 
-def launch_login_webview() -> PearPalCredentials:
-    command = [
-        sys.executable,
-        "-m",
-        "whimbox.map.mask.pearpal_login_webview",
-        "--url",
-        _LOGIN_URL,
-        "--storage-path",
-        str(default_webview_storage_dir()),
-    ]
-    creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-    try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            creationflags=creation_flags,
-            check=False,
-        )
-    except Exception as exc:
-        raise PearPalAuthError(
-            f"failed to start login WebView: {type(exc).__name__}: {exc}"
-        ) from exc
-    result = _last_json_object(completed.stdout)
-    if result is None:
-        detail = completed.stderr.strip().splitlines()[-1:] or ["no result"]
-        raise PearPalAuthError(f"login WebView exited without credentials: {detail[0]}")
-    return parse_webview_login(result)
-
-
-def default_webview_storage_dir() -> Path:
-    base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".whimbox")
-    return base / "Whimbox" / "pearpal-webview"
-
-
-def clear_webview_login_storage() -> None:
-    storage_dir = default_webview_storage_dir()
-    if not storage_dir.exists():
-        return
-    try:
-        shutil.rmtree(storage_dir)
-    except OSError as exc:
-        raise PearPalAuthError(
-            "failed to clear PearPal login storage; "
-            "close the login window and try again"
-        ) from exc
-
-
 def _decode_id_set(value: Any, label: str) -> frozenset[str]:
     if not isinstance(value, list):
         raise PearPalAuthError(f"user info data.{label} must be a list")
@@ -227,14 +159,3 @@ def _decode_id_set(value: Any, label: str) -> frozenset[str]:
         if point_id and len(point_id) <= 64:
             result.add(point_id)
     return frozenset(result)
-
-
-def _last_json_object(output: str) -> dict[str, Any] | None:
-    for line in reversed(output.splitlines()):
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            return value
-    return None
