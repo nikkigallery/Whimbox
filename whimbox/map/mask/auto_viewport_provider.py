@@ -58,7 +58,7 @@ class HybridAutoCenterViewportProvider:
         self.manual_provider = manual_provider
         self._confidence_threshold = _env_float(
             "WHIMBOX_MAP_MASK_VIEWPORT_CONFIDENCE_THRESHOLD",
-            default=0.35,
+            default=0.30,
             minimum=0.0,
         )
         self._max_center_jump = _env_float(
@@ -159,6 +159,7 @@ class HybridAutoCenterViewportProvider:
         self._last_global_analysis: BigMapMatchAnalysis | None = None
         self._matching_status = "matching_failed"
         self._matching_rejection_reason = ""
+        self._low_confidence_active = False
         self._zoom_detection = _ZoomDetection(
             status="unknown",
             level="",
@@ -265,6 +266,12 @@ class HybridAutoCenterViewportProvider:
             )
             self._matching_rejection_reason = str(
                 match.get("matching_rejection_reason") or ""
+            )
+            self._log_low_confidence_if_needed(
+                confidence,
+                selected_match_source=selected_match_source,
+                local_confidence=local_confidence,
+                global_confidence=global_confidence,
             )
             if self._matching_status in {"matching_failed", "matching_ambiguous"}:
                 reason = (
@@ -1000,6 +1007,26 @@ class HybridAutoCenterViewportProvider:
             )
 
         return result
+
+    def _log_low_confidence_if_needed(
+        self,
+        confidence: float,
+        *,
+        selected_match_source: str,
+        local_confidence: float | None,
+        global_confidence: float | None,
+    ) -> None:
+        is_low = confidence < self._confidence_threshold
+        if is_low and not self._low_confidence_active:
+            logger.warning(
+                "[map-mask-match] confidence below threshold: "
+                f"confidence={confidence:.3f}, "
+                f"threshold={self._confidence_threshold:.3f}, "
+                f"source={selected_match_source}, "
+                f"local={_format_optional(local_confidence)}, "
+                f"global={_format_optional(global_confidence)}"
+            )
+        self._low_confidence_active = is_low
 
     def _stabilize_center(
         self,

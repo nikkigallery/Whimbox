@@ -712,6 +712,40 @@ class GameWindowStateRpcTests(unittest.TestCase):
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
+    def test_low_confidence_log_is_emitted_once_until_recovery(self) -> None:
+        provider = HybridAutoCenterViewportProvider(Mock())
+        with patch(
+            "whimbox.map.mask.auto_viewport_provider.logger.warning"
+        ) as warning:
+            provider._log_low_confidence_if_needed(
+                0.2,
+                selected_match_source="global-top1",
+                local_confidence=None,
+                global_confidence=0.2,
+            )
+            provider._log_low_confidence_if_needed(
+                0.1,
+                selected_match_source="global-top1",
+                local_confidence=None,
+                global_confidence=0.1,
+            )
+            provider._log_low_confidence_if_needed(
+                0.5,
+                selected_match_source="local",
+                local_confidence=0.5,
+                global_confidence=None,
+            )
+            provider._log_low_confidence_if_needed(
+                0.29,
+                selected_match_source="local",
+                local_confidence=0.29,
+                global_confidence=None,
+            )
+
+        self.assertEqual(warning.call_count, 2)
+        self.assertIn("confidence=0.200", warning.call_args_list[0].args[0])
+        self.assertIn("threshold=0.300", warning.call_args_list[0].args[0])
+
     def test_unsupported_zoom_is_not_replaced_by_manual_fallback(self) -> None:
         provider = MapMaskViewportProvider()
         unsupported = ViewportResult(
