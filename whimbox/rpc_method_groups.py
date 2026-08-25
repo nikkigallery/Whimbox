@@ -192,16 +192,18 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         scale_factor = HANDLE_OBJ.get_window_scale_factor() if found else 1.0
         if scale_factor <= 0:
             scale_factor = 1.0
-        x = round(physical_x / scale_factor)
-        y = round(physical_y / scale_factor)
-        width = round(physical_width / scale_factor)
-        height = round(physical_height / scale_factor)
         return {
             "found": found,
-            "x": x,
-            "y": y,
-            "width": width,
-            "height": height,
+            # Win32 returns this client-area rectangle in physical screen pixels.
+            # Electron owns the physical-pixel -> DIP conversion because it knows
+            # the target display layout and its own DPI-awareness context.
+            "coordinateSpace": "physical",
+            "x": physical_x,
+            "y": physical_y,
+            "width": physical_width,
+            "height": physical_height,
+            "dpi": round(scale_factor * 96),
+            "dpiScale": scale_factor,
             "isForeground": HANDLE_OBJ.is_foreground() if found else False,
             "isMinimized": bool(HANDLE_OBJ.is_minimized()) if found else False,
         }

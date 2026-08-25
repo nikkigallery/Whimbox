@@ -40,6 +40,7 @@ from whimbox.map.mask.viewport_provider import (
     ViewportResult,
     _resolve_viewport_mode,
 )
+from whimbox.rpc_method_groups import handle_map_mask_method
 
 
 POINT = {
@@ -684,6 +685,30 @@ class BigMapStateProviderTests(unittest.TestCase):
         self.assertTrue(opened.is_bigmap_open)
         self.assertFalse(closed.is_bigmap_open)
         self.assertEqual(provider._detect_with_whimbox_page.call_count, 2)
+
+
+class GameWindowStateRpcTests(unittest.TestCase):
+    def test_returns_physical_client_bounds_for_electron_dip_conversion(self) -> None:
+        with (
+            patch.object(HANDLE_OBJ, "is_alive", return_value=True),
+            patch.object(
+                HANDLE_OBJ,
+                "get_window_rect",
+                return_value=(2400, 180, 1920, 1080),
+            ),
+            patch.object(HANDLE_OBJ, "get_window_scale_factor", return_value=1.5),
+            patch.object(HANDLE_OBJ, "is_foreground", return_value=True),
+            patch.object(HANDLE_OBJ, "is_minimized", return_value=False),
+        ):
+            result = handle_map_mask_method("map_mask.get_game_window_state", {})
+
+        self.assertEqual(result["coordinateSpace"], "physical")
+        self.assertEqual(
+            (result["x"], result["y"], result["width"], result["height"]),
+            (2400, 180, 1920, 1080),
+        )
+        self.assertEqual(result["dpi"], 144)
+        self.assertEqual(result["dpiScale"], 1.5)
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
