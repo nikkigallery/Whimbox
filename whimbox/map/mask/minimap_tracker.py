@@ -22,7 +22,6 @@ from .models import MapMaskViewport
 _MINIMAP_UPDATE_INTERVAL_SECONDS = 0.1
 _MINIMAP_CONFIDENCE_THRESHOLD = 0.3
 _MINIMAP_FAILURE_LIMIT = 5
-_PERF_LOG_INTERVAL_SECONDS = 2.0
 _UNINITIALIZED_HINT = "请打开大地图完成小地图定位"
 _LOST_HINT = "小地图定位已失效，请打开大地图重新定位"
 
@@ -59,7 +58,6 @@ class MiniMapPositionTracker:
         self._local_confidence = 0.0
         self._failure_count = 0
         self._last_update_monotonic = 0.0
-        self._reset_perf_stats()
 
     @property
     def needs_calibration(self) -> bool:
@@ -87,7 +85,6 @@ class MiniMapPositionTracker:
         self._local_confidence = 1.0
         self._failure_count = 0
         self._last_update_monotonic = 0.0
-        self._reset_perf_stats()
         logger.info(
             "[map-mask-minimap] calibrated "
             f"map={map_name} position=({position[0]:.1f},{position[1]:.1f})"
@@ -117,31 +114,21 @@ class MiniMapPositionTracker:
             )
         self._last_update_monotonic = now
 
-        total_started = time.perf_counter()
-        preprocess_ms = 0.0
-        match_ms = 0.0
-        verify_ms = 0.0
-        match_succeeded = False
         try:
             detector = self._ensure_detector()
-            phase_started = time.perf_counter()
             minimap = detector._get_minimap(
                 captured_image,
                 MINIMAP_POSITION_RADIUS,
             )
             minimap = rgb2luma(minimap)
-            preprocess_ms = (time.perf_counter() - phase_started) * 1000
 
-            phase_started = time.perf_counter()
             confidence, local_confidence, candidate = detector._predict_position(
                 minimap,
                 MINIMAP_POSITION_SCALE_DICT[self._map_name],
             )
-            match_ms = (time.perf_counter() - phase_started) * 1000
             self._confidence = round(float(confidence), 5)
             self._local_confidence = round(float(local_confidence), 5)
             candidate_position = tuple(np.round(candidate, 1))
-            phase_started = time.perf_counter()
             if self._confidence < _MINIMAP_CONFIDENCE_THRESHOLD:
                 self._record_failure(
                     f"confidence {self._confidence:.3f} below "
@@ -152,18 +139,8 @@ class MiniMapPositionTracker:
             else:
                 detector.position = candidate_position
                 self._failure_count = 0
-                match_succeeded = True
-            verify_ms = (time.perf_counter() - phase_started) * 1000
         except Exception as exc:  # noqa: BLE001
             self._record_failure(f"{type(exc).__name__}: {exc}")
-        finally:
-            self._record_perf(
-                total_ms=(time.perf_counter() - total_started) * 1000,
-                preprocess_ms=preprocess_ms,
-                match_ms=match_ms,
-                verify_ms=verify_ms,
-                succeeded=match_succeeded,
-            )
 
         return self.snapshot(
             is_main_world_open=True,
@@ -229,54 +206,6 @@ class MiniMapPositionTracker:
             f"confidence={self._confidence:.3f} "
             f"local={self._local_confidence:.3f} reason={reason}"
         )
-
-    def _reset_perf_stats(self) -> None:
-        self._perf_started_monotonic = time.monotonic()
-        self._perf_matches = 0
-        self._perf_successes = 0
-        self._perf_total_ms = 0.0
-        self._perf_preprocess_ms = 0.0
-        self._perf_match_ms = 0.0
-        self._perf_verify_ms = 0.0
-        self._perf_max_total_ms = 0.0
-
-    def _record_perf(
-        self,
-        *,
-        total_ms: float,
-        preprocess_ms: float,
-        match_ms: float,
-        verify_ms: float,
-        succeeded: bool,
-    ) -> None:
-        self._perf_matches += 1
-        if succeeded:
-            self._perf_successes += 1
-        self._perf_total_ms += total_ms
-        self._perf_preprocess_ms += preprocess_ms
-        self._perf_match_ms += match_ms
-        self._perf_verify_ms += verify_ms
-        self._perf_max_total_ms = max(self._perf_max_total_ms, total_ms)
-
-        elapsed = time.monotonic() - self._perf_started_monotonic
-        if elapsed < _PERF_LOG_INTERVAL_SECONDS and self._status != "lost":
-            return
-        count = self._perf_matches
-        if count > 0:
-            logger.info(
-                "[map-mask-minimap-perf] "
-                f"matches={count} successes={self._perf_successes} "
-                f"failures={count - self._perf_successes} "
-                f"avg_total_ms={self._perf_total_ms / count:.2f} "
-                f"max_total_ms={self._perf_max_total_ms:.2f} "
-                f"avg_preprocess_ms={self._perf_preprocess_ms / count:.2f} "
-                f"avg_match_ms={self._perf_match_ms / count:.2f} "
-                f"avg_verify_ms={self._perf_verify_ms / count:.2f} "
-                f"confidence={self._confidence:.3f} "
-                f"local={self._local_confidence:.3f}"
-            )
-        self._reset_perf_stats()
-
 
 def _minimap_viewport(
     *,
