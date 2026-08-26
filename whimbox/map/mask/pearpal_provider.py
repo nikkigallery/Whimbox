@@ -38,7 +38,7 @@ _STAR_CATALOG_IDS = frozenset({"11", "132", "145", "167", "244"})
 _DEWDROP_CATALOG_IDS = frozenset({"12", "133", "146", "168", "245"})
 # Website source merges reading collectible IDs into the user info ``read`` list.
 _READ_CATALOG_IDS = frozenset({"20"})
-_USER_REFRESH_PERIOD_SECONDS = 30.0
+_USER_REFRESH_PERIOD_SECONDS = 15.0
 _USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
 _USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
 
