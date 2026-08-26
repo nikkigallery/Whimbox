@@ -1226,6 +1226,10 @@ class VisiblePointsTests(unittest.TestCase):
                         viewport=viewport(),
                         label_ids=["pearpal_10"],
                     )
+                    repeated = service.get_visible_points(
+                        viewport=viewport(),
+                        label_ids=["pearpal_10"],
+                    )
                     disabled = service.get_visible_points(
                         viewport=viewport(),
                         label_ids=[],
@@ -1235,6 +1239,7 @@ class VisiblePointsTests(unittest.TestCase):
             [point["id"] for point in enabled["points"]],
             ["pearpal_test"],
         )
+        self.assertEqual(repeated["points"], enabled["points"])
         self.assertEqual(disabled["points"], [])
         self.assertEqual(list_points.call_count, 2)
 

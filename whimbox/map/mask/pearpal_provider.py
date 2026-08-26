@@ -112,6 +112,7 @@ class OfficialPearPalProvider:
         self._user_client = user_client or PearPalUserClient(region=self._region)
         self._auth_background = auth_background
         self._data_generation = 0
+        self._points_revision = 0
         self._load_state = "idle"
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
@@ -143,6 +144,12 @@ class OfficialPearPalProvider:
             _BOX_LABEL,
             _READ_LABEL,
         ]
+
+    @property
+    def points_revision(self) -> int:
+        """Revision of every state that can change ``list_points`` output."""
+        with self._lock:
+            return self._points_revision
 
     def list_points(
         self,
@@ -264,7 +271,10 @@ class OfficialPearPalProvider:
 
     def set_hide_awarded(self, hide_awarded: bool) -> dict[str, Any]:
         with self._lock:
-            self._hide_awarded = bool(hide_awarded)
+            updated = bool(hide_awarded)
+            if updated != self._hide_awarded:
+                self._hide_awarded = updated
+                self._points_revision += 1
         return self.get_user_status()
 
     def refresh_user_state(self) -> dict[str, Any]:
@@ -546,6 +556,7 @@ class OfficialPearPalProvider:
 
     def _set_awarded_state_locked(self, awarded_state: PearPalAwardedState) -> None:
         self._awarded_state = awarded_state
+        self._points_revision += 1
         self._matched_awarded_counts = (
             len(
                 self._source_ids_by_label.get(_STAR_LABEL.id, frozenset())

@@ -3,8 +3,9 @@ from __future__ import annotations
 import ctypes
 import threading
 import time
-from typing import Any
 from ctypes import wintypes
+from dataclasses import dataclass
+from typing import Any
 
 from whimbox.common.handle_lib import HANDLE_OBJ
 from whimbox.common.logger import logger
@@ -14,7 +15,7 @@ from .bigmap_state_provider import BigMapDetectionState, BigMapStateProvider
 from .coordinate import point_to_visible, point_to_visible_in_circle
 from .local_provider import LocalJsonProvider
 from .minimap_tracker import MiniMapPositionTracker, MiniMapTrackingSnapshot
-from .models import MapMaskLabel, MapMaskState, MapMaskViewport
+from .models import MapMaskLabel, MapMaskPoint, MapMaskState, MapMaskViewport
 from .mouse_wheel_guard import MouseWheelGuard
 from .pearpal_auth import parse_login_storage
 from .pearpal_provider import OfficialPearPalProvider
@@ -29,6 +30,149 @@ _WHEEL_HINT_SECONDS = 2.0
 _WHEEL_HINT = "地图遮罩暂不支持滚轮缩放，请使用左下角缩放按钮"
 _MINIMAP_CALIBRATION_TIMEOUT_SECONDS = 2.0
 _MINIMAP_CALIBRATION_CONFIDENCE_THRESHOLD = 0.3
+_PERF_LOG_INTERVAL_SECONDS = 2.0
+
+
+@dataclass(slots=True)
+class _MainWorldWorkerPerf:
+    started_monotonic: float = 0.0
+    cycles: int = 0
+    capture_ms: float = 0.0
+    page_detect_ms: float = 0.0
+    viewport_ms: float = 0.0
+    minimap_update_ms: float = 0.0
+    total_ms: float = 0.0
+    max_total_ms: float = 0.0
+    tracking_status: str = "uninitialized"
+
+    def reset(self) -> None:
+        self.started_monotonic = time.monotonic()
+        self.cycles = 0
+        self.capture_ms = 0.0
+        self.page_detect_ms = 0.0
+        self.viewport_ms = 0.0
+        self.minimap_update_ms = 0.0
+        self.total_ms = 0.0
+        self.max_total_ms = 0.0
+
+    def record(
+        self,
+        *,
+        capture_ms: float,
+        page_detect_ms: float,
+        viewport_ms: float,
+        minimap_update_ms: float,
+        total_ms: float,
+        tracking_status: str,
+    ) -> None:
+        self.cycles += 1
+        self.capture_ms += capture_ms
+        self.page_detect_ms += page_detect_ms
+        self.viewport_ms += viewport_ms
+        self.minimap_update_ms += minimap_update_ms
+        self.total_ms += total_ms
+        self.max_total_ms = max(self.max_total_ms, total_ms)
+        self.tracking_status = tracking_status
+        if time.monotonic() - self.started_monotonic < _PERF_LOG_INTERVAL_SECONDS:
+            return
+        count = self.cycles
+        if count > 0:
+            logger.info(
+                "[map-mask-worker-perf] page=main "
+                f"cycles={count} status={self.tracking_status} "
+                f"avg_capture_ms={self.capture_ms / count:.2f} "
+                f"avg_page_detect_ms={self.page_detect_ms / count:.2f} "
+                f"avg_viewport_ms={self.viewport_ms / count:.2f} "
+                f"avg_minimap_update_ms={self.minimap_update_ms / count:.2f} "
+                f"avg_total_ms={self.total_ms / count:.2f} "
+                f"max_total_ms={self.max_total_ms:.2f}"
+            )
+        self.reset()
+
+
+class _VisiblePointsPerf:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._reset_unlocked(mode="")
+
+    def _reset_unlocked(self, *, mode: str) -> None:
+        self._mode = mode
+        self._started_monotonic = time.monotonic()
+        self._requests = 0
+        self._early_returns = 0
+        self._touch_ms = 0.0
+        self._state_build_ms = 0.0
+        self._state_to_dict_ms = 0.0
+        self._list_points_ms = 0.0
+        self._project_ms = 0.0
+        self._response_ms = 0.0
+        self._total_ms = 0.0
+        self._max_total_ms = 0.0
+        self._candidates = 0
+        self._visible = 0
+        self._candidate_cache_hits = 0
+        self._visible_cache_hits = 0
+
+    def record(
+        self,
+        *,
+        mode: str,
+        early_return: bool,
+        touch_ms: float,
+        state_build_ms: float,
+        state_to_dict_ms: float,
+        list_points_ms: float,
+        project_ms: float,
+        response_ms: float,
+        total_ms: float,
+        candidates: int,
+        visible: int,
+        candidate_cache_hit: bool,
+        visible_cache_hit: bool,
+    ) -> None:
+        message: str | None = None
+        with self._lock:
+            if mode != self._mode:
+                self._reset_unlocked(mode=mode)
+            self._requests += 1
+            self._early_returns += int(early_return)
+            self._touch_ms += touch_ms
+            self._state_build_ms += state_build_ms
+            self._state_to_dict_ms += state_to_dict_ms
+            self._list_points_ms += list_points_ms
+            self._project_ms += project_ms
+            self._response_ms += response_ms
+            self._total_ms += total_ms
+            self._max_total_ms = max(self._max_total_ms, total_ms)
+            self._candidates += candidates
+            self._visible += visible
+            self._candidate_cache_hits += int(candidate_cache_hit)
+            self._visible_cache_hits += int(visible_cache_hit)
+            if (
+                time.monotonic() - self._started_monotonic
+                >= _PERF_LOG_INTERVAL_SECONDS
+            ):
+                count = self._requests
+                message = (
+                    "[map-mask-visible-points-perf] "
+                    f"mode={self._mode} requests={count} "
+                    f"early_returns={self._early_returns} "
+                    f"avg_touch_ms={self._touch_ms / count:.2f} "
+                    f"avg_state_build_ms={self._state_build_ms / count:.2f} "
+                    f"avg_state_to_dict_ms={self._state_to_dict_ms / count:.2f} "
+                    f"avg_list_points_ms={self._list_points_ms / count:.2f} "
+                    f"avg_project_ms={self._project_ms / count:.2f} "
+                    f"avg_response_ms={self._response_ms / count:.2f} "
+                    f"avg_total_ms={self._total_ms / count:.2f} "
+                    f"max_total_ms={self._max_total_ms:.2f} "
+                    f"avg_candidates={self._candidates / count:.1f} "
+                    f"avg_visible={self._visible / count:.1f} "
+                    f"candidate_cache_hits={self._candidate_cache_hits} "
+                    f"visible_cache_hits={self._visible_cache_hits}"
+                )
+                self._reset_unlocked(mode=mode)
+        if message is not None:
+            logger.info(message)
 
 
 class MapMaskService:
@@ -65,6 +209,13 @@ class MapMaskService:
         self._last_bigmap_open = False
         self._minimap_calibration_active = False
         self._minimap_calibration_deadline = 0.0
+        self._visible_points_perf = _VisiblePointsPerf()
+        self._points_cache_lock = threading.Lock()
+        self._candidate_points_cache_key: tuple[Any, ...] | None = None
+        self._candidate_points_cache: tuple[MapMaskPoint, ...] = ()
+        self._visible_points_cache_key: tuple[Any, ...] | None = None
+        self._visible_points_cache: tuple[dict[str, Any], ...] = ()
+        self._visible_points_candidate_count = 0
         self._mouse_wheel_guard = MouseWheelGuard(
             should_block=self._should_block_mouse_wheel,
             on_blocked=self._note_mouse_wheel_blocked,
@@ -102,6 +253,8 @@ class MapMaskService:
 
     def _detection_loop(self) -> None:
         current_thread = threading.current_thread()
+        main_world_perf = _MainWorldWorkerPerf()
+        main_world_perf.reset()
         self._mouse_wheel_guard.start()
         logger.info("[map-mask-worker] started")
         stop_reason = "inactive"
@@ -126,15 +279,25 @@ class MapMaskService:
                     map_name = self._detection_map_name
 
                 try:
+                    cycle_started = time.perf_counter()
                     with self._detection_provider_lock:
                         from whimbox.interaction.interaction_core import itt
 
+                        phase_started = time.perf_counter()
                         captured_image = itt.capture()
+                        capture_ms = (time.perf_counter() - phase_started) * 1000
+
+                        phase_started = time.perf_counter()
                         bigmap_state = self.bigmap_state_provider.detect(
                             captured_image=captured_image,
                         )
+                        page_detect_ms = (
+                            time.perf_counter() - phase_started
+                        ) * 1000
                         self._wheel_bigmap_open = bool(bigmap_state.is_bigmap_open)
                         self._wheel_bigmap_detection_monotonic = time.monotonic()
+
+                        phase_started = time.perf_counter()
                         self._update_minimap_calibration_attempt(bigmap_state)
                         viewport_result = self._detect_viewport_result(
                             map_name=map_name,
@@ -142,13 +305,30 @@ class MapMaskService:
                             captured_image=captured_image,
                         )
                         self._try_calibrate_minimap(viewport_result)
+                        viewport_ms = (time.perf_counter() - phase_started) * 1000
+
+                        phase_started = time.perf_counter()
                         minimap_snapshot = self.minimap_tracker.update(
                             captured_image,
                             is_main_world_open=bigmap_state.is_main_world_open,
                         )
+                        minimap_update_ms = (
+                            time.perf_counter() - phase_started
+                        ) * 1000
                     self.official_provider.note_overlay_activity(
                         is_bigmap_open=bigmap_state.is_bigmap_open,
                     )
+                    if bigmap_state.is_main_world_open:
+                        main_world_perf.record(
+                            capture_ms=capture_ms,
+                            page_detect_ms=page_detect_ms,
+                            viewport_ms=viewport_ms,
+                            minimap_update_ms=minimap_update_ms,
+                            total_ms=(time.perf_counter() - cycle_started) * 1000,
+                            tracking_status=minimap_snapshot.status,
+                        )
+                    else:
+                        main_world_perf.reset()
                 except Exception as exc:  # noqa: BLE001
                     self._wheel_bigmap_open = False
                     logger.exception(f"[map-mask-worker] detection cycle failed: {exc}")
@@ -386,31 +566,119 @@ class MapMaskService:
         map_name: str | None = None,
         label_ids: list[str] | None = None,
     ) -> dict[str, Any]:
+        total_started = time.perf_counter()
+
+        phase_started = time.perf_counter()
         self._touch_detection_worker(map_name)
+        touch_ms = (time.perf_counter() - phase_started) * 1000
+
+        phase_started = time.perf_counter()
         state, active_viewport, _, _ = self._build_state(
             viewport=viewport,
             map_name=map_name,
         )
+        state_build_ms = (time.perf_counter() - phase_started) * 1000
+
+        phase_started = time.perf_counter()
         state_dict = state.to_dict()
+        state_to_dict_ms = (time.perf_counter() - phase_started) * 1000
+        mode = state.display_mode or "unavailable"
         if not self.enabled or not state.is_map_open or active_viewport is None:
-            return {"state": state_dict, "viewport": {}, "points": []}
+            phase_started = time.perf_counter()
+            response = {"state": state_dict, "viewport": {}, "points": []}
+            response_ms = (time.perf_counter() - phase_started) * 1000
+            self._visible_points_perf.record(
+                mode=mode,
+                early_return=True,
+                touch_ms=touch_ms,
+                state_build_ms=state_build_ms,
+                state_to_dict_ms=state_to_dict_ms,
+                list_points_ms=0.0,
+                project_ms=0.0,
+                response_ms=response_ms,
+                total_ms=(time.perf_counter() - total_started) * 1000,
+                candidates=0,
+                visible=0,
+                candidate_cache_hit=False,
+                visible_cache_hit=False,
+            )
+            return response
 
-        selected_label_ids = label_ids if label_ids is not None else self.get_selected_label_ids()
-        points = self._list_points(label_ids=selected_label_ids, map_name=active_viewport.map_name)
-        visible_points = []
-        for point in points:
-            if state.display_mode == "minimap":
-                visible = point_to_visible_in_circle(point, active_viewport)
-            else:
-                visible = point_to_visible(point, active_viewport)
-            if visible is not None:
-                visible_points.append(visible.to_dict())
+        selected_label_ids = (
+            label_ids if label_ids is not None else self.get_selected_label_ids()
+        )
+        provider = self._provider_with_fallback()
+        candidate_cache_key = (
+            id(provider),
+            int(getattr(provider, "points_revision", 0)),
+            active_viewport.map_name,
+            tuple(sorted(set(selected_label_ids))),
+        )
+        visible_cache_key = (
+            candidate_cache_key,
+            mode,
+            _viewport_projection_cache_key(active_viewport),
+        )
 
-        return {
+        phase_started = time.perf_counter()
+        cached_visible = self._get_cached_visible_points(visible_cache_key)
+        list_points_ms = (time.perf_counter() - phase_started) * 1000
+        candidate_cache_hit = False
+        visible_cache_hit = cached_visible is not None
+        if cached_visible is not None:
+            cached_points, candidate_count = cached_visible
+            visible_points = list(cached_points)
+            project_ms = 0.0
+        else:
+            phase_started = time.perf_counter()
+            points, candidate_cache_hit = self._get_candidate_points(
+                key=candidate_cache_key,
+                provider=provider,
+                label_ids=selected_label_ids,
+                map_name=active_viewport.map_name,
+            )
+            list_points_ms += (time.perf_counter() - phase_started) * 1000
+            candidate_count = len(points)
+
+            phase_started = time.perf_counter()
+            visible_points = []
+            for point in points:
+                if state.display_mode == "minimap":
+                    visible = point_to_visible_in_circle(point, active_viewport)
+                else:
+                    visible = point_to_visible(point, active_viewport)
+                if visible is not None:
+                    visible_points.append(visible.to_dict())
+            project_ms = (time.perf_counter() - phase_started) * 1000
+            self._store_visible_points(
+                key=visible_cache_key,
+                points=visible_points,
+                candidate_count=candidate_count,
+            )
+
+        phase_started = time.perf_counter()
+        response = {
             "state": state_dict,
             "viewport": active_viewport.to_dict(),
             "points": visible_points,
         }
+        response_ms = (time.perf_counter() - phase_started) * 1000
+        self._visible_points_perf.record(
+            mode=mode,
+            early_return=False,
+            touch_ms=touch_ms,
+            state_build_ms=state_build_ms,
+            state_to_dict_ms=state_to_dict_ms,
+            list_points_ms=list_points_ms,
+            project_ms=project_ms,
+            response_ms=response_ms,
+            total_ms=(time.perf_counter() - total_started) * 1000,
+            candidates=candidate_count,
+            visible=len(visible_points),
+            candidate_cache_hit=candidate_cache_hit,
+            visible_cache_hit=visible_cache_hit,
+        )
+        return response
 
     def get_point_detail(self, point_id: str) -> dict[str, Any]:
         return self._provider_with_fallback().get_point_detail(point_id)
@@ -692,6 +960,53 @@ class MapMaskService:
             map_name=map_name,
         )
 
+    def _get_candidate_points(
+        self,
+        *,
+        key: tuple[Any, ...],
+        provider: MapMaskProvider,
+        label_ids: list[str],
+        map_name: str,
+    ) -> tuple[tuple[MapMaskPoint, ...], bool]:
+        with self._points_cache_lock:
+            if key == self._candidate_points_cache_key:
+                return self._candidate_points_cache, True
+
+        points = tuple(
+            provider.list_points(
+                label_ids=label_ids,
+                map_name=map_name,
+            )
+        )
+        with self._points_cache_lock:
+            self._candidate_points_cache_key = key
+            self._candidate_points_cache = points
+        return points, False
+
+    def _get_cached_visible_points(
+        self,
+        key: tuple[Any, ...],
+    ) -> tuple[tuple[dict[str, Any], ...], int] | None:
+        with self._points_cache_lock:
+            if key != self._visible_points_cache_key:
+                return None
+            return (
+                self._visible_points_cache,
+                self._visible_points_candidate_count,
+            )
+
+    def _store_visible_points(
+        self,
+        *,
+        key: tuple[Any, ...],
+        points: list[dict[str, Any]],
+        candidate_count: int,
+    ) -> None:
+        with self._points_cache_lock:
+            self._visible_points_cache_key = key
+            self._visible_points_cache = tuple(points)
+            self._visible_points_candidate_count = candidate_count
+
     def _provider_with_fallback(self) -> MapMaskProvider:
         try:
             if self.provider.name == self.official_provider.name and not self.official_provider.enabled:
@@ -700,6 +1015,24 @@ class MapMaskService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"map mask provider unavailable, fallback to local: {exc}")
             return self.fallback_provider
+
+
+def _viewport_projection_cache_key(
+    viewport: MapMaskViewport,
+) -> tuple[str, float, float, float, float, int, int, int, int, float, float]:
+    return (
+        viewport.map_name,
+        viewport.image_left,
+        viewport.image_top,
+        viewport.image_width,
+        viewport.image_height,
+        viewport.screen_left,
+        viewport.screen_top,
+        viewport.screen_width,
+        viewport.screen_height,
+        viewport.scale,
+        viewport.rotation,
+    )
 
 
 map_mask_service = MapMaskService()
