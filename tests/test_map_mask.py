@@ -1081,10 +1081,31 @@ class DetectionWorkerLifecycleTests(unittest.TestCase):
             self.assertTrue(service._should_block_mouse_wheel())
         with patch.object(HANDLE_OBJ, "is_foreground", return_value=False):
             self.assertFalse(service._should_block_mouse_wheel())
+        with (
+            patch.object(HANDLE_OBJ, "is_foreground", return_value=True),
+            patch(
+                "whimbox.map.mask.service.has_foreground_task",
+                return_value=True,
+            ),
+        ):
+            self.assertFalse(service._should_block_mouse_wheel())
 
         service._wheel_bigmap_detection_monotonic = time.monotonic() - 1.0
         with patch.object(HANDLE_OBJ, "is_foreground", return_value=True):
             self.assertFalse(service._should_block_mouse_wheel())
+
+    def test_enable_is_rejected_while_foreground_task_is_running(self) -> None:
+        service = MapMaskService()
+        service.enabled = False
+
+        with patch(
+            "whimbox.map.mask.service.has_foreground_task",
+            return_value=True,
+        ):
+            state = service.set_enabled(True)
+
+        self.assertFalse(service.enabled)
+        self.assertFalse(state["enabled"])
 
     def test_blocked_wheel_hint_expires(self) -> None:
         service = MapMaskService()

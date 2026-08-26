@@ -8,6 +8,7 @@ from whimbox.config.config import global_config
 from whimbox.common.cvars import get_current_run_id
 
 from pynput import keyboard
+import sys
 import time
 import traceback
 import threading
@@ -20,6 +21,19 @@ STATE_TYPE_FAILED = "failed"    # 失败，不会引发重试
 
 STEP_NAME_FINISH = "step_finish"
 _REGISTER_STEP_COUNTER = count()
+
+
+def _disable_active_map_mask() -> None:
+    """Stop an already-loaded map mask before a foreground game task runs."""
+    try:
+        module = sys.modules.get("whimbox.map.mask.service")
+        service = getattr(module, "map_mask_service", None) if module else None
+        if service is not None and service.enabled:
+            service.set_enabled(False)
+            logger.info("[map-mask] disabled for foreground automation task")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"failed to disable map mask for foreground task: {exc}")
+
 
 class state:
     def __init__(self, type="", msg=""):
@@ -179,6 +193,7 @@ class TaskTemplate:
             # 如果是顶层任务，设置前台任务运行标志
             if self.is_top_level_task:
                 set_foreground_task_running(True)
+                _disable_active_map_mask()
                 if self.show_stop_key_message:
                     self.log_to_gui("你可以按 " + self._get_stop_hotkey() + " 键，随时停止任务")
             

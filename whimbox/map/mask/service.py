@@ -6,6 +6,7 @@ import time
 from ctypes import wintypes
 from typing import Any
 
+from whimbox.common.cvars import has_foreground_task
 from whimbox.common.handle_lib import HANDLE_OBJ
 from whimbox.common.logger import logger
 from whimbox.config.config import global_config
@@ -193,7 +194,11 @@ class MapMaskService:
             logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
 
     def _should_block_mouse_wheel(self) -> bool:
-        if not self.enabled or not self._wheel_bigmap_open:
+        if (
+            not self.enabled
+            or has_foreground_task()
+            or not self._wheel_bigmap_open
+        ):
             return False
         if (
             time.monotonic() - self._wheel_bigmap_detection_monotonic
@@ -206,7 +211,11 @@ class MapMaskService:
         self._last_blocked_wheel_monotonic = time.monotonic()
 
     def _should_block_map_drag(self) -> bool:
-        if not self.enabled or not self._minimap_calibration_active:
+        if (
+            not self.enabled
+            or has_foreground_task()
+            or not self._minimap_calibration_active
+        ):
             return False
         if time.monotonic() >= self._minimap_calibration_deadline:
             return False
@@ -348,7 +357,8 @@ class MapMaskService:
         return state.to_dict()
 
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
-        self.enabled = bool(enabled)
+        requested_enabled = bool(enabled)
+        self.enabled = requested_enabled and not has_foreground_task()
         if not self.enabled:
             self._wheel_bigmap_open = False
             self._last_blocked_wheel_monotonic = 0.0

@@ -219,6 +219,12 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
     if method == "map_mask.prepare_points":
         return map_mask_service.prepare_points()
 
+    if method == "map_mask.set_enabled":
+        enabled = params.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a boolean")
+        return map_mask_service.set_enabled(enabled)
+
     if method == "map_mask.set_selected_labels":
         label_ids = params.get("selected_label_ids", params.get("label_ids", []))
         if not isinstance(label_ids, list):
