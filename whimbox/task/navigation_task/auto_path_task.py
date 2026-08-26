@@ -454,8 +454,10 @@ class AutoPathTask(TaskTemplate):
                 elif self.target_point.action == ACTION_FISHING:
                     if not self.path_info.test_mode:
                         fishing_task = FishingTask(
-                            session_id=self.session_id, 
-                            fishing_type=FISHING_TYPE_MIRALAND)
+                            session_id=self.session_id,
+                            fishing_type=FISHING_TYPE_MIRALAND,
+                            max_cast_count=self.target_point.action_params,
+                        )
                         task_result = fishing_task.task_run()
                         self.merge_material_count_dict(task_result.data)
                     else:
@@ -675,7 +677,7 @@ class AutoPathTask(TaskTemplate):
 
 if __name__ == "__main__":
     # task = AutoPathTask(session_id="debug", path_name="测试卡住2", should_magnet=False)
-    task = AutoPathTask(session_id="debug", path_name="鎏金蜜鎏金蜜南北绿豆")
+    task = AutoPathTask(session_id="debug", path_name="example5_钓鱼测试")
     task_result = task.task_run()
     print(task_result.to_dict())
 

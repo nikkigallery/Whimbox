@@ -43,13 +43,42 @@ FISHING_STATE_MAPPING = [
 
 FISHING_TYPE_MIRALAND = "钓鱼"
 FISHING_TYPE_HOME = "钓陨星"
+_DEFAULT_MIRALAND_CAST_COUNT = 3
+_DEFAULT_HOME_CAST_COUNT = 5
+
+
+def _parse_cast_count(value):
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        cast_count = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("钓鱼抛竿次数必须为正整数") from exc
+    if cast_count <= 0:
+        raise ValueError("钓鱼抛竿次数必须为正整数")
+    return cast_count
+
 
 class FishingTask(TaskTemplate):
-    def __init__(self, session_id, fishing_type=None, already_material_count_dict=None):
+    def __init__(
+        self,
+        session_id,
+        fishing_type=None,
+        already_material_count_dict=None,
+        max_cast_count=None,
+    ):
         super().__init__(session_id=session_id, name="fishing_task")
         self.fishing_type = fishing_type # 大世界钓鱼or家园钓星
         self.material_count_dict = {}
         self.already_material_count_dict = already_material_count_dict
+        self.max_cast_count = _parse_cast_count(max_cast_count)
+
+    def get_cast_count_limit(self):
+        if self.max_cast_count is not None:
+            return self.max_cast_count
+        if self.fishing_type == FISHING_TYPE_HOME:
+            return _DEFAULT_HOME_CAST_COUNT
+        return _DEFAULT_MIRALAND_CAST_COUNT
 
     def get_fishing_type(self):
         cap = itt.capture(anchor_posi=AreaFishingIcons.position)
@@ -200,17 +229,14 @@ class FishingTask(TaskTemplate):
 
     @register_step("开始钓鱼")
     def step2(self):
-        fish_time = 0
+        cast_count = 0
         while not self.need_stop():
-            if self.fishing_type == FISHING_TYPE_MIRALAND and fish_time >= 3: # 大世界钓鱼最多钓3次
+            if cast_count >= self.get_cast_count_limit():
                 break
-            if self.fishing_type == FISHING_TYPE_HOME and fish_time >= 5: # 家园钓星最多钓5次
-                break
+            cast_count += 1
             res = self.fishing_loop()
             itt.delay(0.5, comment="稍等一下再开始钓鱼，避免太快吞操作")
-            if res == FishingResult.SUCCESS:
-                fish_time += 1
-            elif res == FishingResult.NO_FISH:
+            if res == FishingResult.NO_FISH:
                 break
             elif res == FishingResult.WRONG_POSITION:
                 break
