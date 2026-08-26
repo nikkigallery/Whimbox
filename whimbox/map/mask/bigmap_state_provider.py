@@ -16,6 +16,7 @@ class BigMapDetectionState:
     last_detection_time: str
     last_successful_detection_time: str
     detection_duration_ms: float
+    is_main_world_open: bool = False
     message: str = ""
 
 
@@ -23,6 +24,7 @@ class BigMapStateProvider:
     def __init__(self) -> None:
         self._last_successful_detection_time = ""
         self._last_auto_is_bigmap_open = False
+        self._last_auto_is_main_world_open = False
 
     def get_mode(self) -> str:
         return "auto"
@@ -36,14 +38,22 @@ class BigMapStateProvider:
         message = "detected with page_bigmap check_icon"
         try:
             is_open = self._detect_with_whimbox_page(captured_image=captured_image)
+            is_main_world_open = bool(
+                not is_open
+                and self._detect_main_world_with_whimbox_page(
+                    captured_image=captured_image,
+                )
+            )
             confidence = 0.85 if is_open else 0.65
             self._last_successful_detection_time = timestamp
             self._last_auto_is_bigmap_open = is_open
+            self._last_auto_is_main_world_open = is_main_world_open
         except Exception as exc:  # noqa: BLE001
             source = "ui.page_assets.page_bigmap:error"
             error = str(exc)
             message = f"auto detection unavailable: {exc}"
             is_open = self._last_auto_is_bigmap_open
+            is_main_world_open = self._last_auto_is_main_world_open
         return BigMapDetectionState(
             is_bigmap_open=is_open,
             raw_is_bigmap_open=is_open,
@@ -54,6 +64,7 @@ class BigMapStateProvider:
             last_detection_time=timestamp,
             last_successful_detection_time=self._last_successful_detection_time,
             detection_duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            is_main_world_open=is_main_world_open,
             message=message,
         )
 
@@ -62,3 +73,9 @@ class BigMapStateProvider:
         from whimbox.ui.page_assets import page_bigmap
 
         return bool(page_bigmap.is_current_page(itt, cap=captured_image))
+
+    def _detect_main_world_with_whimbox_page(self, captured_image=None) -> bool:
+        from whimbox.interaction.interaction_core import itt
+        from whimbox.ui.page_assets import page_main
+
+        return bool(page_main.is_current_page(itt, cap=captured_image))

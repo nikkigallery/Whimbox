@@ -14,18 +14,24 @@ _HC_ACTION = 0
 _WM_QUIT = 0x0012
 _WM_MOUSEWHEEL = 0x020A
 _WM_MOUSEHWHEEL = 0x020E
+_WM_MOUSEMOVE = 0x0200
+_VK_LBUTTON = 0x01
 
 
 class MouseWheelGuard:
-    """Suppress mouse-wheel messages while a lightweight predicate is true."""
+    """Suppress selected mouse input while lightweight predicates are true."""
 
     def __init__(
         self,
         should_block: Callable[[], bool],
         on_blocked: Callable[[], None],
+        should_block_left_drag: Callable[[], bool] | None = None,
+        on_left_drag_blocked: Callable[[], None] | None = None,
     ) -> None:
         self._should_block = should_block
         self._on_blocked = on_blocked
+        self._should_block_left_drag = should_block_left_drag
+        self._on_left_drag_blocked = on_left_drag_blocked
         self._lock = threading.Lock()
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
@@ -120,6 +126,19 @@ class MouseWheelGuard:
                 try:
                     if self._should_block():
                         self._on_blocked()
+                        return 1
+                except Exception:  # noqa: BLE001
+                    # Hook callbacks must always fail open so mouse input cannot stick.
+                    pass
+            if code == _HC_ACTION and message == _WM_MOUSEMOVE:
+                try:
+                    if (
+                        self._should_block_left_drag is not None
+                        and user32.GetAsyncKeyState(_VK_LBUTTON) & 0x8000
+                        and self._should_block_left_drag()
+                    ):
+                        if self._on_left_drag_blocked is not None:
+                            self._on_left_drag_blocked()
                         return 1
                 except Exception:  # noqa: BLE001
                     # Hook callbacks must always fail open so mouse input cannot stick.

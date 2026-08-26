@@ -22,8 +22,9 @@ from whimbox.map.mask.bigmap_state_provider import (
     BigMapDetectionState,
     BigMapStateProvider,
 )
-from whimbox.map.mask.coordinate import point_to_visible
+from whimbox.map.mask.coordinate import point_to_visible, point_to_visible_in_circle
 from whimbox.map.mask.local_provider import LocalJsonProvider
+from whimbox.map.mask.minimap_tracker import MiniMapPositionTracker
 from whimbox.map.mask.models import MapMaskPoint, MapMaskViewport
 from whimbox.map.mask.pearpal_provider import OfficialPearPalProvider
 from whimbox.map.mask.pearpal_auth import (
@@ -678,13 +679,120 @@ class BigMapStateProviderTests(unittest.TestCase):
     def test_each_detection_uses_the_current_single_frame_result(self) -> None:
         provider = BigMapStateProvider()
         provider._detect_with_whimbox_page = Mock(side_effect=[True, False])
+        provider._detect_main_world_with_whimbox_page = Mock(return_value=True)
 
         opened = provider.detect()
         closed = provider.detect()
 
         self.assertTrue(opened.is_bigmap_open)
+        self.assertFalse(opened.is_main_world_open)
         self.assertFalse(closed.is_bigmap_open)
+        self.assertTrue(closed.is_main_world_open)
         self.assertEqual(provider._detect_with_whimbox_page.call_count, 2)
+
+
+class FakeMiniMapDetector:
+    def __init__(self) -> None:
+        self.position = (0.0, 0.0)
+        self.map_name = ""
+        self.pos_change_timer = Mock()
+        self.candidate = np.array([1001.0, 2002.0])
+        self.confidence = 0.45
+        self.local_confidence = 0.08
+        self.verify_result = True
+
+    def init_position(self, position) -> None:
+        self.position = position
+
+    def _get_minimap(self, image, radius):
+        return image
+
+    def _predict_position(self, image, scale):
+        return self.confidence, self.local_confidence, self.candidate
+
+    def verify_position(self, position) -> bool:
+        return self.verify_result
+
+
+class MiniMapPositionTrackerTests(unittest.TestCase):
+    def test_bigmap_seed_initializes_local_tracking_viewport(self) -> None:
+        detector = FakeMiniMapDetector()
+        tracker = MiniMapPositionTracker(detector=detector)
+
+        self.assertTrue(tracker.initialize((1000.0, 2000.0), "miraland"))
+        snapshot = tracker.snapshot(
+            is_main_world_open=True,
+            screen_width=1920,
+            screen_height=1080,
+        )
+
+        self.assertEqual(snapshot.status, "tracking")
+        self.assertEqual((snapshot.position_x, snapshot.position_y), (1000.0, 2000.0))
+        self.assertIsNotNone(snapshot.viewport)
+        assert snapshot.viewport is not None
+        self.assertEqual(
+            (snapshot.viewport.screen_left, snapshot.viewport.screen_top),
+            (79, 20),
+        )
+        self.assertEqual(
+            (snapshot.viewport.screen_width, snapshot.viewport.screen_height),
+            (204, 204),
+        )
+
+    def test_repeated_low_confidence_marks_tracking_lost(self) -> None:
+        detector = FakeMiniMapDetector()
+        detector.confidence = 0.1
+        tracker = MiniMapPositionTracker(detector=detector)
+        tracker.initialize((1000.0, 2000.0), "miraland")
+
+        with patch("whimbox.map.mask.minimap_tracker.rgb2luma", side_effect=lambda image: image):
+            for _ in range(5):
+                tracker._last_update_monotonic = 0.0
+                snapshot = tracker.update(
+                    np.zeros((200, 200), dtype=np.uint8),
+                    is_main_world_open=True,
+                )
+
+        self.assertEqual(snapshot.status, "lost")
+        self.assertIn("打开大地图", snapshot.hint)
+        self.assertIsNone(snapshot.viewport)
+
+
+class MiniMapCoordinateTests(unittest.TestCase):
+    def test_minimap_projection_filters_rectangular_corners(self) -> None:
+        detector = FakeMiniMapDetector()
+        tracker = MiniMapPositionTracker(detector=detector)
+        tracker.initialize((1000.0, 2000.0), "miraland")
+        snapshot = tracker.snapshot(
+            is_main_world_open=True,
+            screen_width=1920,
+            screen_height=1080,
+        )
+        assert snapshot.viewport is not None
+        center_point = MapMaskPoint(
+            id="center",
+            label_id="test",
+            name="center",
+            map_name="miraland",
+            image_x=1000.0,
+            image_y=2000.0,
+        )
+        corner_point = MapMaskPoint(
+            id="corner",
+            label_id="test",
+            name="corner",
+            map_name="miraland",
+            image_x=snapshot.viewport.image_left,
+            image_y=snapshot.viewport.image_top,
+        )
+
+        center = point_to_visible_in_circle(center_point, snapshot.viewport)
+        corner = point_to_visible_in_circle(corner_point, snapshot.viewport)
+
+        self.assertIsNotNone(center)
+        assert center is not None
+        self.assertEqual((center.screen_x, center.screen_y), (181.0, 122.0))
+        self.assertIsNone(corner)
 
 
 class GameWindowStateRpcTests(unittest.TestCase):
@@ -916,6 +1024,53 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
 
 
 class DetectionWorkerLifecycleTests(unittest.TestCase):
+    def test_minimap_calibration_only_runs_when_tracking_needs_it(self) -> None:
+        service = MapMaskService()
+        service.minimap_tracker = MiniMapPositionTracker(
+            detector=FakeMiniMapDetector()
+        )
+        opened = BigMapDetectionState(
+            is_bigmap_open=True,
+            raw_is_bigmap_open=True,
+            detection_mode="auto",
+            detection_source="test",
+            detection_confidence=1.0,
+            detection_error="",
+            last_detection_time="",
+            last_successful_detection_time="",
+            detection_duration_ms=0.0,
+        )
+        closed = BigMapDetectionState(
+            is_bigmap_open=False,
+            raw_is_bigmap_open=False,
+            detection_mode="auto",
+            detection_source="test",
+            detection_confidence=1.0,
+            detection_error="",
+            last_detection_time="",
+            last_successful_detection_time="",
+            detection_duration_ms=0.0,
+            is_main_world_open=True,
+        )
+
+        service._update_minimap_calibration_attempt(opened)
+        self.assertTrue(service._minimap_calibration_active)
+        service._try_calibrate_minimap(
+            ViewportResult(
+                viewport=viewport(),
+                mode="hybrid-auto-center",
+                source="hybrid-auto-center",
+                detection_confidence=0.5,
+                matching_status="matching_accepted",
+            )
+        )
+        self.assertEqual(service.minimap_tracker.status, "tracking")
+        self.assertFalse(service._minimap_calibration_active)
+
+        service._update_minimap_calibration_attempt(closed)
+        service._update_minimap_calibration_attempt(opened)
+        self.assertFalse(service._minimap_calibration_active)
+
     def test_wheel_blocking_requires_fresh_bigmap_and_game_foreground(self) -> None:
         service = MapMaskService()
         service.enabled = True

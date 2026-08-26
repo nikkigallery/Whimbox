@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import ctypes
 import threading
 import time
 from typing import Any
+from ctypes import wintypes
 
 from whimbox.common.handle_lib import HANDLE_OBJ
 from whimbox.common.logger import logger
 from whimbox.config.config import global_config
 
 from .bigmap_state_provider import BigMapDetectionState, BigMapStateProvider
-from .coordinate import point_to_visible
+from .coordinate import point_to_visible, point_to_visible_in_circle
 from .local_provider import LocalJsonProvider
+from .minimap_tracker import MiniMapPositionTracker, MiniMapTrackingSnapshot
 from .models import MapMaskLabel, MapMaskState, MapMaskViewport
 from .mouse_wheel_guard import MouseWheelGuard
 from .pearpal_auth import parse_login_storage
@@ -24,6 +27,8 @@ _DETECTION_WORKER_IDLE_SECONDS = 2.0
 _WHEEL_BIGMAP_STATE_MAX_AGE_SECONDS = 0.5
 _WHEEL_HINT_SECONDS = 2.0
 _WHEEL_HINT = "地图遮罩暂不支持滚轮缩放，请使用左下角缩放按钮"
+_MINIMAP_CALIBRATION_TIMEOUT_SECONDS = 2.0
+_MINIMAP_CALIBRATION_CONFIDENCE_THRESHOLD = 0.3
 
 
 class MapMaskService:
@@ -36,6 +41,7 @@ class MapMaskService:
         self.official_provider = OfficialPearPalProvider(enabled=use_pearpal)
         self.viewport_provider = MapMaskViewportProvider()
         self.bigmap_state_provider = BigMapStateProvider()
+        self.minimap_tracker = MiniMapPositionTracker()
         self.provider: MapMaskProvider = (
             self.official_provider if use_pearpal else self.local_provider
         )
@@ -49,13 +55,20 @@ class MapMaskService:
         self._detection_thread: threading.Thread | None = None
         self._detection_last_activity = 0.0
         self._detection_map_name: str | None = None
-        self._detection_snapshot: tuple[BigMapDetectionState, ViewportResult] | None = None
+        self._detection_snapshot: (
+            tuple[BigMapDetectionState, ViewportResult, MiniMapTrackingSnapshot]
+            | None
+        ) = None
         self._wheel_bigmap_open = False
         self._wheel_bigmap_detection_monotonic = 0.0
         self._last_blocked_wheel_monotonic = 0.0
+        self._last_bigmap_open = False
+        self._minimap_calibration_active = False
+        self._minimap_calibration_deadline = 0.0
         self._mouse_wheel_guard = MouseWheelGuard(
             should_block=self._should_block_mouse_wheel,
             on_blocked=self._note_mouse_wheel_blocked,
+            should_block_left_drag=self._should_block_map_drag,
         )
 
     def _touch_detection_worker(self, map_name: str | None) -> None:
@@ -122,10 +135,16 @@ class MapMaskService:
                         )
                         self._wheel_bigmap_open = bool(bigmap_state.is_bigmap_open)
                         self._wheel_bigmap_detection_monotonic = time.monotonic()
+                        self._update_minimap_calibration_attempt(bigmap_state)
                         viewport_result = self._detect_viewport_result(
                             map_name=map_name,
                             is_bigmap_open=bigmap_state.is_bigmap_open,
                             captured_image=captured_image,
+                        )
+                        self._try_calibrate_minimap(viewport_result)
+                        minimap_snapshot = self.minimap_tracker.update(
+                            captured_image,
+                            is_main_world_open=bigmap_state.is_main_world_open,
                         )
                     self.official_provider.note_overlay_activity(
                         is_bigmap_open=bigmap_state.is_bigmap_open,
@@ -136,7 +155,11 @@ class MapMaskService:
                 else:
                     with self._detection_lock:
                         if self.enabled and self._detection_thread is current_thread:
-                            self._detection_snapshot = (bigmap_state, viewport_result)
+                            self._detection_snapshot = (
+                                bigmap_state,
+                                viewport_result,
+                                minimap_snapshot,
+                            )
 
                 self._detection_wake.wait(_DETECTION_WORKER_DELAY_SECONDS)
                 self._detection_wake.clear()
@@ -156,6 +179,9 @@ class MapMaskService:
                 self._wheel_bigmap_open = False
                 self._wheel_bigmap_detection_monotonic = 0.0
                 self._last_blocked_wheel_monotonic = 0.0
+                self._last_bigmap_open = False
+                self._minimap_calibration_active = False
+                self._minimap_calibration_deadline = 0.0
                 self._mouse_wheel_guard.stop()
             self.official_provider.note_overlay_inactive()
             logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
@@ -172,6 +198,80 @@ class MapMaskService:
 
     def _note_mouse_wheel_blocked(self) -> None:
         self._last_blocked_wheel_monotonic = time.monotonic()
+
+    def _should_block_map_drag(self) -> bool:
+        if not self.enabled or not self._minimap_calibration_active:
+            return False
+        if time.monotonic() >= self._minimap_calibration_deadline:
+            return False
+        if not self._wheel_bigmap_open:
+            return False
+        if (
+            time.monotonic() - self._wheel_bigmap_detection_monotonic
+            > _WHEEL_BIGMAP_STATE_MAX_AGE_SECONDS
+        ):
+            return False
+        return HANDLE_OBJ.is_foreground() and self._cursor_is_inside_game_window()
+
+    def _cursor_is_inside_game_window(self) -> bool:
+        try:
+            point = wintypes.POINT()
+            if not ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+                return False
+            left, top, width, height = HANDLE_OBJ.get_window_rect()
+            return (
+                left <= point.x < left + width
+                and top <= point.y < top + height
+            )
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _update_minimap_calibration_attempt(
+        self,
+        bigmap_state: BigMapDetectionState,
+    ) -> None:
+        is_bigmap_open = bool(bigmap_state.is_bigmap_open)
+        just_opened = is_bigmap_open and not self._last_bigmap_open
+        self._last_bigmap_open = is_bigmap_open
+        if not is_bigmap_open:
+            self._minimap_calibration_active = False
+            self._minimap_calibration_deadline = 0.0
+            return
+        if just_opened and self.minimap_tracker.needs_calibration:
+            self._minimap_calibration_active = True
+            self._minimap_calibration_deadline = (
+                time.monotonic() + _MINIMAP_CALIBRATION_TIMEOUT_SECONDS
+            )
+
+    def _try_calibrate_minimap(self, viewport_result: ViewportResult) -> None:
+        if not self._minimap_calibration_active:
+            return
+        if time.monotonic() >= self._minimap_calibration_deadline:
+            self._minimap_calibration_active = False
+            logger.warning("[map-mask-minimap] big-map calibration timed out")
+            return
+        viewport = viewport_result.viewport
+        if viewport is None:
+            return
+        if viewport_result.stale or viewport_result.source != "hybrid-auto-center":
+            return
+        if viewport_result.matching_status not in {
+            "matching_accepted",
+            "matching_provisional",
+        }:
+            return
+        if (
+            viewport_result.detection_confidence
+            < _MINIMAP_CALIBRATION_CONFIDENCE_THRESHOLD
+        ):
+            return
+        center = (
+            viewport.image_left + viewport.image_width / 2,
+            viewport.image_top + viewport.image_height / 2,
+        )
+        if self.minimap_tracker.initialize(center, viewport.map_name):
+            self._minimap_calibration_active = False
+            self._minimap_calibration_deadline = 0.0
 
     def _wheel_overlay_hint(self) -> str:
         if self._last_blocked_wheel_monotonic <= 0:
@@ -211,7 +311,7 @@ class MapMaskService:
 
     def _get_detection_snapshot(
         self,
-    ) -> tuple[BigMapDetectionState, ViewportResult] | None:
+    ) -> tuple[BigMapDetectionState, ViewportResult, MiniMapTrackingSnapshot] | None:
         with self._detection_lock:
             if not self.enabled:
                 return None
@@ -229,6 +329,7 @@ class MapMaskService:
             last_detection_time="",
             last_successful_detection_time="",
             detection_duration_ms=0.0,
+            is_main_world_open=False,
             message="map-mask detection worker is pending or inactive",
         )
 
@@ -237,7 +338,7 @@ class MapMaskService:
         viewport: MapMaskViewport | None = None,
         map_name: str | None = None,
     ) -> dict[str, Any]:
-        state, _, _ = self._build_state(viewport=viewport, map_name=map_name)
+        state, _, _, _ = self._build_state(viewport=viewport, map_name=map_name)
         return state.to_dict()
 
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
@@ -245,6 +346,8 @@ class MapMaskService:
         if not self.enabled:
             self._wheel_bigmap_open = False
             self._last_blocked_wheel_monotonic = 0.0
+            self._minimap_calibration_active = False
+            self._minimap_calibration_deadline = 0.0
             with self._detection_lock:
                 self._detection_snapshot = None
                 self._detection_wake.set()
@@ -284,16 +387,22 @@ class MapMaskService:
         label_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         self._touch_detection_worker(map_name)
-        state, active_viewport, _ = self._build_state(viewport=viewport, map_name=map_name)
+        state, active_viewport, _, _ = self._build_state(
+            viewport=viewport,
+            map_name=map_name,
+        )
         state_dict = state.to_dict()
-        if not self.enabled or not state.is_bigmap_open or active_viewport is None:
+        if not self.enabled or not state.is_map_open or active_viewport is None:
             return {"state": state_dict, "viewport": {}, "points": []}
 
         selected_label_ids = label_ids if label_ids is not None else self.get_selected_label_ids()
         points = self._list_points(label_ids=selected_label_ids, map_name=active_viewport.map_name)
         visible_points = []
         for point in points:
-            visible = point_to_visible(point, active_viewport)
+            if state.display_mode == "minimap":
+                visible = point_to_visible_in_circle(point, active_viewport)
+            else:
+                visible = point_to_visible(point, active_viewport)
             if visible is not None:
                 visible_points.append(visible.to_dict())
 
@@ -345,7 +454,12 @@ class MapMaskService:
         self,
         viewport: MapMaskViewport | None = None,
         map_name: str | None = None,
-    ) -> tuple[MapMaskState, MapMaskViewport | None, BigMapDetectionState]:
+    ) -> tuple[
+        MapMaskState,
+        MapMaskViewport | None,
+        BigMapDetectionState,
+        MiniMapTrackingSnapshot,
+    ]:
         selected_label_ids = self.get_selected_label_ids()
         uses_detection_worker = bool(
             viewport is None
@@ -363,7 +477,7 @@ class MapMaskService:
                     stale=True,
                 )
             else:
-                bigmap_state, viewport_result = snapshot
+                bigmap_state, viewport_result, minimap_snapshot = snapshot
         else:
             bigmap_state = self.bigmap_state_provider.detect()
             viewport_result = self._get_viewport_result(
@@ -371,17 +485,59 @@ class MapMaskService:
                 map_name=map_name,
                 is_bigmap_open=bigmap_state.is_bigmap_open,
             )
+            minimap_snapshot = self.minimap_tracker.snapshot(
+                is_main_world_open=bigmap_state.is_main_world_open,
+                screen_width=viewport_result.screen_width,
+                screen_height=viewport_result.screen_height,
+            )
+        if uses_detection_worker and snapshot is None:
+            minimap_snapshot = self.minimap_tracker.snapshot(
+                is_main_world_open=False,
+                screen_width=None,
+                screen_height=None,
+            )
         data_status = self._get_data_status()
         raw_viewport = viewport_result.viewport
-        viewport_source = self._get_viewport_source(viewport_result, bigmap_state.is_bigmap_open)
-        active_viewport = raw_viewport if bigmap_state.is_bigmap_open else None
+        if bigmap_state.is_bigmap_open:
+            display_mode = "bigmap"
+            active_viewport = raw_viewport
+            viewport_source = self._get_viewport_source(viewport_result, True)
+        elif bigmap_state.is_main_world_open:
+            display_mode = "minimap"
+            active_viewport = minimap_snapshot.viewport
+            viewport_source = (
+                "minimap-tracker" if active_viewport is not None else "none"
+            )
+        else:
+            display_mode = "hidden"
+            active_viewport = None
+            viewport_source = "page-hidden"
         has_valid_viewport = active_viewport is not None
+        viewport_screen_width = (
+            minimap_snapshot.screen_width
+            if display_mode == "minimap"
+            else viewport_result.screen_width
+        )
+        viewport_screen_height = (
+            minimap_snapshot.screen_height
+            if display_mode == "minimap"
+            else viewport_result.screen_height
+        )
         state = MapMaskState(
             enabled=self.enabled,
-            is_map_open=self.enabled and bigmap_state.is_bigmap_open and has_valid_viewport,
+            is_map_open=self.enabled and has_valid_viewport,
             is_bigmap_open=bigmap_state.is_bigmap_open,
             has_valid_viewport=has_valid_viewport,
             selected_label_ids=selected_label_ids,
+            is_main_world_open=bigmap_state.is_main_world_open,
+            display_mode=display_mode,
+            minimap_tracking_status=minimap_snapshot.status,
+            minimap_position_x=minimap_snapshot.position_x,
+            minimap_position_y=minimap_snapshot.position_y,
+            minimap_confidence=minimap_snapshot.confidence,
+            minimap_local_confidence=minimap_snapshot.local_confidence,
+            minimap_failure_count=minimap_snapshot.failure_count,
+            minimap_hint=minimap_snapshot.hint,
             provider=self.provider.name,
             fallback_provider=self.fallback_provider.name,
             data_source=str(data_status.get("data_source") or "sample"),
@@ -454,8 +610,8 @@ class MapMaskService:
             viewport_stale=viewport_result.stale,
             viewport_calibration_path=viewport_result.calibration_path,
             viewport_calibration_error=viewport_result.calibration_error,
-            viewport_screen_width=viewport_result.screen_width,
-            viewport_screen_height=viewport_result.screen_height,
+            viewport_screen_width=viewport_screen_width,
+            viewport_screen_height=viewport_screen_height,
             map_scale=viewport_result.map_scale,
             map_scale_source=viewport_result.map_scale_source,
             viewport_span_source=viewport_result.viewport_span_source,
@@ -475,7 +631,7 @@ class MapMaskService:
             debug=self.use_sample_viewport,
             message=bigmap_state.message,
         )
-        return state, active_viewport, bigmap_state
+        return state, active_viewport, bigmap_state, minimap_snapshot
 
     def _get_viewport_result(
         self,

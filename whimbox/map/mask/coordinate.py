@@ -30,3 +30,22 @@ def point_to_visible(
         provider=point.provider,
         is_visible=True,
     )
+
+
+def point_to_visible_in_circle(
+    point: MapMaskPoint,
+    viewport: MapMaskViewport,
+) -> VisibleMapMaskPoint | None:
+    visible = point_to_visible(point, viewport)
+    if visible is None:
+        return None
+    center_x = viewport.screen_left + viewport.screen_width / 2
+    center_y = viewport.screen_top + viewport.screen_height / 2
+    radius = min(viewport.screen_width, viewport.screen_height) / 2
+    distance_squared = (
+        (visible.screen_x - center_x) ** 2
+        + (visible.screen_y - center_y) ** 2
+    )
+    if distance_squared > radius**2:
+        return None
+    return visible

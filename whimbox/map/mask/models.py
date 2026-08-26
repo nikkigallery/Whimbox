@@ -119,6 +119,18 @@ class MapMaskState:
     is_bigmap_open: bool
     has_valid_viewport: bool
     selected_label_ids: list[str]
+    is_main_world_open: bool = False
+    display_mode: str = "hidden"
+    minimap_tracking_status: str = "uninitialized"
+    minimap_position_x: float | None = None
+    minimap_position_y: float | None = None
+    minimap_confidence: float = 0.0
+    minimap_local_confidence: float = 0.0
+    minimap_failure_count: int = 0
+    minimap_hint: str = ""
+    minimap_center_x: float = 181.0
+    minimap_center_y: float = 122.0
+    minimap_radius: float = 102.0
     provider: str = "local"
     fallback_provider: str = "local"
     data_source: str = "sample"
