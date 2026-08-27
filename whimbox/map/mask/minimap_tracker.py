@@ -19,8 +19,8 @@ from whimbox.map.detection.cvars import (
 from .models import MapMaskViewport
 
 
-_MINIMAP_UPDATE_INTERVAL_SECONDS = 0.1
-_MINIMAP_CONFIDENCE_THRESHOLD = 0.3
+_MINIMAP_UPDATE_INTERVAL_SECONDS = 0.02
+_MINIMAP_CONFIDENCE_THRESHOLD = 0.25
 _MINIMAP_FAILURE_LIMIT = 5
 _UNINITIALIZED_HINT = "请打开大地图完成小地图定位"
 _LOST_HINT = "小地图定位已失效，请打开大地图重新定位"
