@@ -20,8 +20,8 @@ from .models import MapMaskViewport
 
 
 _MINIMAP_UPDATE_INTERVAL_SECONDS = 0.02
-_MINIMAP_CONFIDENCE_THRESHOLD = 0.25
-_MINIMAP_FAILURE_LIMIT = 5
+_MINIMAP_CONFIDENCE_THRESHOLD = 0.15
+_MINIMAP_FAILURE_TIMEOUT_SECONDS = 5.0
 _UNINITIALIZED_HINT = "请打开大地图完成小地图定位"
 _LOST_HINT = "小地图定位已失效，请打开大地图重新定位"
 
@@ -57,6 +57,7 @@ class MiniMapPositionTracker:
         self._confidence = 0.0
         self._local_confidence = 0.0
         self._failure_count = 0
+        self._failure_started_monotonic: float | None = None
         self._last_update_monotonic = 0.0
 
     @property
@@ -83,7 +84,7 @@ class MiniMapPositionTracker:
         self._status = "tracking"
         self._confidence = 1.0
         self._local_confidence = 1.0
-        self._failure_count = 0
+        self._reset_failure_streak()
         self._last_update_monotonic = 0.0
         logger.info(
             "[map-mask-minimap] calibrated "
@@ -98,9 +99,17 @@ class MiniMapPositionTracker:
         is_main_world_open: bool,
     ) -> MiniMapTrackingSnapshot:
         screen_width, screen_height = _image_size(captured_image)
-        if not is_main_world_open or self._status != "tracking":
+        if not is_main_world_open:
+            if self._status == "tracking":
+                self._reset_failure_streak()
             return self.snapshot(
-                is_main_world_open=is_main_world_open,
+                is_main_world_open=False,
+                screen_width=screen_width,
+                screen_height=screen_height,
+            )
+        if self._status != "tracking":
+            return self.snapshot(
+                is_main_world_open=True,
                 screen_width=screen_width,
                 screen_height=screen_height,
             )
@@ -138,7 +147,7 @@ class MiniMapPositionTracker:
                 self._record_failure("position movement verification failed")
             else:
                 detector.position = candidate_position
-                self._failure_count = 0
+                self._reset_failure_streak()
         except Exception as exc:  # noqa: BLE001
             self._record_failure(f"{type(exc).__name__}: {exc}")
 
@@ -197,15 +206,27 @@ class MiniMapPositionTracker:
         return float(position[0]), float(position[1])
 
     def _record_failure(self, reason: str) -> None:
+        now = time.monotonic()
         self._failure_count += 1
-        if self._failure_count < _MINIMAP_FAILURE_LIMIT:
+        if self._failure_started_monotonic is None:
+            self._failure_started_monotonic = now
+            return
+        failure_duration = now - self._failure_started_monotonic
+        if failure_duration < _MINIMAP_FAILURE_TIMEOUT_SECONDS:
             return
         self._status = "lost"
         logger.warning(
             "[map-mask-minimap] tracking lost "
             f"confidence={self._confidence:.3f} "
-            f"local={self._local_confidence:.3f} reason={reason}"
+            f"local={self._local_confidence:.3f} "
+            f"failures={self._failure_count} "
+            f"duration={failure_duration:.2f}s reason={reason}"
         )
+
+    def _reset_failure_streak(self) -> None:
+        self._failure_count = 0
+        self._failure_started_monotonic = None
+
 
 def _minimap_viewport(
     *,

@@ -739,7 +739,7 @@ class MiniMapPositionTrackerTests(unittest.TestCase):
             (204, 204),
         )
 
-    def test_repeated_low_confidence_marks_tracking_lost(self) -> None:
+    def test_continuous_low_confidence_marks_tracking_lost_after_timeout(self) -> None:
         detector = FakeMiniMapDetector()
         detector.confidence = 0.1
         tracker = MiniMapPositionTracker(detector=detector)
@@ -752,6 +752,15 @@ class MiniMapPositionTrackerTests(unittest.TestCase):
                     np.zeros((200, 200), dtype=np.uint8),
                     is_main_world_open=True,
                 )
+            self.assertEqual(snapshot.status, "tracking")
+
+            assert tracker._failure_started_monotonic is not None
+            tracker._failure_started_monotonic -= 5.0
+            tracker._last_update_monotonic = 0.0
+            snapshot = tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
 
         self.assertEqual(snapshot.status, "lost")
         self.assertIn("打开大地图", snapshot.hint)

@@ -58,7 +58,7 @@ class HybridAutoCenterViewportProvider:
         self.manual_provider = manual_provider
         self._confidence_threshold = _env_float(
             "WHIMBOX_MAP_MASK_VIEWPORT_CONFIDENCE_THRESHOLD",
-            default=0.25,
+            default=0.15,
             minimum=0.0,
         )
         self._max_center_jump = _env_float(
