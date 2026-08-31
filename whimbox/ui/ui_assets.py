@@ -28,7 +28,6 @@ ButtonExit = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,30,23
 AreaExitBackLoginButton = Area(anchor=ANCHOR_CENTER)
 TextExitBackLoginButton = Text("返回登录", cap_area = AreaExitBackLoginButton)
 ButtonExitLogout = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,200], [179,80,255]), anchor=ANCHOR_TOP_RIGHT)
-# AreaRegisterLoginButton = Button(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0,0,180], [30,255,255]), anchor=ANCHOR_BOTTOM_CENTER)
 AreaRegisterLoginButton = Area(anchor=ANCHOR_BOTTOM_CENTER)
 TextRegisterLoginButton = Text("注册\\登录", cap_area = AreaRegisterLoginButton)
 AreaLoginAccountList = Area(anchor=ANCHOR_CENTER)
