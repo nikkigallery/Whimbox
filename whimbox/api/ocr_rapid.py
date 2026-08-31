@@ -8,8 +8,9 @@ from whimbox.common.path_lib import ASSETS_PATH
 # 错误替换表
 REPLACE_DICT = {
     "拋掷": "抛掷",
-    "占土进入游戏": "点击进入游戏",
+    "占土": "点击",
     "注冊": "注册",
+    "进人": "进入",
 }
 
 class RapidOcr():
@@ -103,5 +104,5 @@ ocr = RapidOcr()
 if __name__ == '__main__':
     from whimbox.interaction.interaction_core import itt
     from whimbox.ui.ui_assets import *
-    img = itt.capture(anchor_posi=AreaBlessHuanjingLevelsSelect.position)
+    img = itt.capture(anchor_posi=AreaRegisterLoginButton.position)
     print(ocr.detect_and_ocr(img, show_res=True))

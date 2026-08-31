@@ -179,6 +179,9 @@
   "AreaPickup": {
     "rel_path": "imgs\\Windows\\General\\AreaPickup.png"
   },
+  "AreaRegisterLoginButton": {
+    "rel_path": "imgs\\Windows\\UI\\login\\AreaRegisterLoginButton.png"
+  },
   "AreaSubAbilityButton": {
     "rel_path": "imgs\\Windows\\General\\AreaSubAbilityButton.png"
   },
@@ -331,9 +334,6 @@
   },
   "ButtonJihuaSort": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\jihua\\ButtonJihuaSort.png"
-  },
-  "ButtonLogin": {
-    "rel_path": "imgs\\Windows\\UI\\login\\ButtonLogin.png"
   },
   "ButtonMinigameQuit": {
     "rel_path": "imgs\\Windows\\UI\\minigame\\ButtonMinigameQuit.png"

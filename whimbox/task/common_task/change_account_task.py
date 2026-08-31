@@ -75,32 +75,39 @@ class ChangeAccountTask(TaskTemplate):
 
     @register_step("退出登录")
     def step_logout(self):
-        itt.delay(3, comment="等待进入登录界面")
-        # 如果当前已经是退出登录状态，直接去下一步
-        if itt.get_img_existence(ButtonLogin):
-            return
-        if wait_until_appear(ButtonExitLogout, retry_time=30):
-            itt.delay(3, comment="等待退出账号按钮真正可交互")
-            ButtonExitLogout.click()
-            while not self.need_stop():
-                itt.delay(1)
-                text_box_dict = itt.ocr_and_detect_posi(AreaLoginOCR)
-                logger.info(f"登录界面文字: {text_box_dict.keys()}")
-                if "确认" in text_box_dict:
-                    self.log_to_gui("有确认按钮我直接点！")
-                    AreaLoginOCR.click(target_box=text_box_dict["确认"])
-                elif "同意" in text_box_dict:
-                    self.log_to_gui("有同意按钮我直接点！")
-                    AreaLoginOCR.click(target_box=text_box_dict["同意"])
-                if itt.get_img_existence(ButtonLogin):
-                    return
+        times = 30
+        while times > 0:
+            times -= 1
+            if self.need_stop():
+              break  
+            itt.delay(1, comment="等待进入登录界面")
+            if itt.get_text_existence(TextRegisterLoginButton):
+                # 如果当前已经是退出登录状态，直接去下一步
+                return
+            elif itt.get_img_existence(ButtonExitLogout):
+                itt.delay(3, comment="等待退出账号按钮真正可交互")
+                ButtonExitLogout.click()
+                while not self.need_stop():
+                    itt.delay(1)
+                    text_box_dict = itt.ocr_and_detect_posi(AreaLoginOCR)
+                    logger.info(f"登录界面文字: {text_box_dict.keys()}")
+                    if "确认" in text_box_dict:
+                        self.log_to_gui("有确认按钮我直接点！")
+                        AreaLoginOCR.click(target_box=text_box_dict["确认"])
+                    elif "同意" in text_box_dict:
+                        self.log_to_gui("有同意按钮我直接点！")
+                        AreaLoginOCR.click(target_box=text_box_dict["同意"])
+                    if itt.get_text_existence(TextRegisterLoginButton):
+                        return
+            else:
+                continue
         else:
             self.update_task_result(status=STATE_TYPE_FAILED, message="没有找到退出登录按钮")
             return STEP_NAME_FINISH
 
     @register_step("切换账号登录")
     def step_change_account(self):
-        if not wait_until_appear_then_click(ButtonLogin):
+        if not wait_until_appear_then_click(TextRegisterLoginButton):
             self.update_task_result(status=STATE_TYPE_FAILED, message="没有找到登录按钮")
             return STEP_NAME_FINISH
 
