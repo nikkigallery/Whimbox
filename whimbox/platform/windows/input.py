@@ -50,9 +50,17 @@ class WindowsInputManager(InputManager):
         return win32api.GetCursorPos()
 
     def key_event(self, key: str, down: bool) -> None:
+        key_name = key.lower()
         vk_code = self.get_virtual_keycode(key)
-        sc = win32api.MapVirtualKey(win32con.VK_SHIFT, 0) if key == 'shift' else 0
-        flags = 0 if down else win32con.KEYEVENTF_KEYUP
+        if key_name == 'shift':
+            sc = win32api.MapVirtualKey(win32con.VK_SHIFT, 0)
+        elif key_name == 'right_control':
+            sc = win32api.MapVirtualKey(vk_code, 0)
+        else:
+            sc = 0
+        flags = win32con.KEYEVENTF_EXTENDEDKEY if key_name == 'right_control' else 0
+        if not down:
+            flags |= win32con.KEYEVENTF_KEYUP
         win32api.keybd_event(vk_code, sc, flags, 0)
 
     def get_virtual_keycode(self, key: str) -> int:

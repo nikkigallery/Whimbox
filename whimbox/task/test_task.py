@@ -36,8 +36,14 @@ if __name__ == "__main__":
     #     time.sleep(0.5)
     # # ui_control.goto_page(page_huanjing_bless)
     
-    while True:
-        print(itt.ocr_single_line(AreaLoginOCR))
-        time.sleep(0.2)
+    # while True:
+    #     print(itt.ocr_single_line(AreaLoginOCR))
+    #     time.sleep(0.2)
+    
+    times = 10
+    while times > 0:
+        times -= 1
+        itt.key_down(keybind.KEYBIND_FORWARD)
+        time.sleep(0.5)
 
 
