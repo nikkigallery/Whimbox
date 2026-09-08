@@ -766,6 +766,93 @@ class MiniMapPositionTrackerTests(unittest.TestCase):
         self.assertIn("打开大地图", snapshot.hint)
         self.assertIsNone(snapshot.viewport)
 
+    def test_main_world_reentry_requires_three_high_confidence_matches(self) -> None:
+        detector = FakeMiniMapDetector()
+        tracker = MiniMapPositionTracker(detector=detector)
+        tracker.initialize((1000.0, 2000.0), "miraland")
+
+        with patch("whimbox.map.mask.minimap_tracker.rgb2luma", side_effect=lambda image: image):
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=False,
+            )
+            assert tracker._main_world_hidden_since is not None
+            tracker._main_world_hidden_since -= 0.3
+
+            for expected_status in ("revalidating", "revalidating", "tracking"):
+                tracker._last_update_monotonic = 0.0
+                snapshot = tracker.update(
+                    np.zeros((200, 200), dtype=np.uint8),
+                    is_main_world_open=True,
+                )
+                self.assertEqual(snapshot.status, expected_status)
+
+        self.assertIsNotNone(snapshot.viewport)
+
+    def test_main_world_reentry_low_confidence_marks_tracking_lost(self) -> None:
+        detector = FakeMiniMapDetector()
+        tracker = MiniMapPositionTracker(detector=detector)
+        tracker.initialize((1000.0, 2000.0), "miraland")
+
+        with patch("whimbox.map.mask.minimap_tracker.rgb2luma", side_effect=lambda image: image):
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=False,
+            )
+            assert tracker._main_world_hidden_since is not None
+            tracker._main_world_hidden_since -= 0.3
+            detector.confidence = 0.2
+            tracker._last_update_monotonic = 0.0
+            snapshot = tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+            self.assertEqual(snapshot.status, "revalidating")
+            self.assertIsNone(snapshot.viewport)
+
+            assert tracker._revalidation_started_monotonic is not None
+            tracker._revalidation_started_monotonic -= 2.0
+            tracker._last_update_monotonic = 0.0
+            snapshot = tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+
+        self.assertEqual(snapshot.status, "lost")
+        self.assertIn("打开大地图", snapshot.hint)
+        self.assertIsNone(snapshot.viewport)
+
+    def test_short_main_world_detection_gap_does_not_trigger_revalidation(self) -> None:
+        detector = FakeMiniMapDetector()
+        tracker = MiniMapPositionTracker(detector=detector)
+        tracker.initialize((1000.0, 2000.0), "miraland")
+
+        with patch("whimbox.map.mask.minimap_tracker.rgb2luma", side_effect=lambda image: image):
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+            tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=False,
+            )
+            tracker._last_update_monotonic = 0.0
+            snapshot = tracker.update(
+                np.zeros((200, 200), dtype=np.uint8),
+                is_main_world_open=True,
+            )
+
+        self.assertEqual(snapshot.status, "tracking")
+        self.assertIsNotNone(snapshot.viewport)
+
 
 class MiniMapCoordinateTests(unittest.TestCase):
     def test_minimap_projection_filters_rectangular_corners(self) -> None:

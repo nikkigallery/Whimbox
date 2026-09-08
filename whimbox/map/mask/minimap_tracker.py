@@ -22,6 +22,11 @@ from .models import MapMaskViewport
 _MINIMAP_UPDATE_INTERVAL_SECONDS = 0.02
 _MINIMAP_CONFIDENCE_THRESHOLD = 0.15
 _MINIMAP_FAILURE_TIMEOUT_SECONDS = 5.0
+_MAIN_WORLD_EXIT_DEBOUNCE_SECONDS = 0.25
+_REENTRY_CONFIDENCE_THRESHOLD = 0.25
+_REENTRY_VALIDATION_TIMEOUT_SECONDS = 2.0
+_REENTRY_VALIDATION_REQUIRED_SUCCESSES = 3
+_REENTRY_CANDIDATE_TOLERANCE = 3.0
 _UNINITIALIZED_HINT = "请打开大地图完成小地图定位"
 _LOST_HINT = "小地图定位已失效，请打开大地图重新定位"
 
@@ -59,6 +64,13 @@ class MiniMapPositionTracker:
         self._failure_count = 0
         self._failure_started_monotonic: float | None = None
         self._last_update_monotonic = 0.0
+        self._has_seen_main_world = False
+        self._last_main_world_open = False
+        self._main_world_hidden_since: float | None = None
+        self._revalidation_active = False
+        self._revalidation_started_monotonic: float | None = None
+        self._revalidation_success_count = 0
+        self._revalidation_candidate: tuple[float, float] | None = None
 
     @property
     def needs_calibration(self) -> bool:
@@ -86,6 +98,10 @@ class MiniMapPositionTracker:
         self._local_confidence = 1.0
         self._reset_failure_streak()
         self._last_update_monotonic = 0.0
+        self._has_seen_main_world = False
+        self._last_main_world_open = False
+        self._main_world_hidden_since = None
+        self._clear_revalidation()
         logger.info(
             "[map-mask-minimap] calibrated "
             f"map={map_name} position=({position[0]:.1f},{position[1]:.1f})"
@@ -99,6 +115,8 @@ class MiniMapPositionTracker:
         is_main_world_open: bool,
     ) -> MiniMapTrackingSnapshot:
         screen_width, screen_height = _image_size(captured_image)
+        now = time.monotonic()
+        self._observe_main_world_state(is_main_world_open, now)
         if not is_main_world_open:
             if self._status == "tracking":
                 self._reset_failure_streak()
@@ -114,7 +132,6 @@ class MiniMapPositionTracker:
                 screen_height=screen_height,
             )
 
-        now = time.monotonic()
         if now - self._last_update_monotonic < _MINIMAP_UPDATE_INTERVAL_SECONDS:
             return self.snapshot(
                 is_main_world_open=True,
@@ -138,7 +155,9 @@ class MiniMapPositionTracker:
             self._confidence = round(float(confidence), 5)
             self._local_confidence = round(float(local_confidence), 5)
             candidate_position = tuple(np.round(candidate, 1))
-            if self._confidence < _MINIMAP_CONFIDENCE_THRESHOLD:
+            if self._revalidation_active:
+                self._update_revalidation(candidate_position, now)
+            elif self._confidence < _MINIMAP_CONFIDENCE_THRESHOLD:
                 self._record_failure(
                     f"confidence {self._confidence:.3f} below "
                     f"{_MINIMAP_CONFIDENCE_THRESHOLD:.3f}"
@@ -149,7 +168,11 @@ class MiniMapPositionTracker:
                 detector.position = candidate_position
                 self._reset_failure_streak()
         except Exception as exc:  # noqa: BLE001
-            self._record_failure(f"{type(exc).__name__}: {exc}")
+            reason = f"{type(exc).__name__}: {exc}"
+            if self._revalidation_active:
+                self._record_revalidation_failure(reason, now)
+            else:
+                self._record_failure(reason)
 
         return self.snapshot(
             is_main_world_open=True,
@@ -166,7 +189,11 @@ class MiniMapPositionTracker:
     ) -> MiniMapTrackingSnapshot:
         position = self._position()
         viewport = None
-        if self._status == "tracking" and position is not None:
+        if (
+            self._status == "tracking"
+            and not self._revalidation_active
+            and position is not None
+        ):
             viewport = _minimap_viewport(
                 position=position,
                 map_name=self._map_name,
@@ -178,7 +205,7 @@ class MiniMapPositionTracker:
             elif self._status == "lost":
                 hint = _LOST_HINT
         return MiniMapTrackingSnapshot(
-            status=self._status,
+            status="revalidating" if self._revalidation_active else self._status,
             is_main_world_open=is_main_world_open,
             map_name=self._map_name,
             position_x=position[0] if position is not None else None,
@@ -222,6 +249,117 @@ class MiniMapPositionTracker:
             f"failures={self._failure_count} "
             f"duration={failure_duration:.2f}s reason={reason}"
         )
+
+    def _observe_main_world_state(self, is_main_world_open: bool, now: float) -> None:
+        if not is_main_world_open:
+            if self._last_main_world_open:
+                self._main_world_hidden_since = now
+            self._last_main_world_open = False
+            return
+
+        if not self._has_seen_main_world:
+            self._has_seen_main_world = True
+            self._last_main_world_open = True
+            self._main_world_hidden_since = None
+            return
+
+        if not self._last_main_world_open:
+            hidden_since = self._main_world_hidden_since
+            hidden_duration = now - hidden_since if hidden_since is not None else 0.0
+            if (
+                self._status == "tracking"
+                and not self._revalidation_active
+                and hidden_duration >= _MAIN_WORLD_EXIT_DEBOUNCE_SECONDS
+            ):
+                self._start_revalidation(now)
+        self._last_main_world_open = True
+        self._main_world_hidden_since = None
+
+    def _start_revalidation(self, now: float) -> None:
+        self._revalidation_active = True
+        self._revalidation_started_monotonic = now
+        self._revalidation_success_count = 0
+        self._revalidation_candidate = None
+        self._reset_failure_streak()
+        logger.info(
+            "[map-mask-minimap] main world resumed; validating previous position "
+            f"threshold={_REENTRY_CONFIDENCE_THRESHOLD:.2f}"
+        )
+
+    def _update_revalidation(
+        self,
+        candidate_position: tuple[float, float],
+        now: float,
+    ) -> None:
+        if self._confidence < _REENTRY_CONFIDENCE_THRESHOLD:
+            self._record_revalidation_failure(
+                f"confidence {self._confidence:.3f} below "
+                f"{_REENTRY_CONFIDENCE_THRESHOLD:.3f}",
+                now,
+            )
+            return
+
+        previous_candidate = self._revalidation_candidate
+        if previous_candidate is not None:
+            distance = float(
+                np.linalg.norm(
+                    np.asarray(candidate_position) - np.asarray(previous_candidate)
+                )
+            )
+            if distance > _REENTRY_CANDIDATE_TOLERANCE:
+                self._failure_count += 1
+                self._revalidation_success_count = 1
+                self._revalidation_candidate = candidate_position
+                self._finish_revalidation_if_timed_out(
+                    now,
+                    f"candidate moved {distance:.1f}px during validation",
+                )
+                return
+
+        self._revalidation_candidate = candidate_position
+        self._revalidation_success_count += 1
+        if (
+            self._revalidation_success_count
+            < _REENTRY_VALIDATION_REQUIRED_SUCCESSES
+        ):
+            return
+
+        detector = self._ensure_detector()
+        detector.position = candidate_position
+        detector.pos_change_timer.reset()
+        self._clear_revalidation()
+        self._reset_failure_streak()
+        logger.info(
+            "[map-mask-minimap] previous position validated "
+            f"confidence={self._confidence:.3f}"
+        )
+
+    def _record_revalidation_failure(self, reason: str, now: float) -> None:
+        self._failure_count += 1
+        self._revalidation_success_count = 0
+        self._revalidation_candidate = None
+        self._finish_revalidation_if_timed_out(now, reason)
+
+    def _finish_revalidation_if_timed_out(self, now: float, reason: str) -> None:
+        started = self._revalidation_started_monotonic
+        if started is None or now - started < _REENTRY_VALIDATION_TIMEOUT_SECONDS:
+            return
+        duration = now - started
+        self._status = "lost"
+        self._clear_revalidation()
+        logger.warning(
+            "[map-mask-minimap] position validation failed after returning to main world "
+            f"confidence={self._confidence:.3f} "
+            f"local={self._local_confidence:.3f} "
+            f"failures={self._failure_count} "
+            f"duration={duration:.2f}s reason={reason}"
+        )
+
+    def _clear_revalidation(self) -> None:
+        self._revalidation_active = False
+        self._revalidation_started_monotonic = None
+        self._revalidation_success_count = 0
+        self._revalidation_candidate = None
 
     def _reset_failure_streak(self) -> None:
         self._failure_count = 0
