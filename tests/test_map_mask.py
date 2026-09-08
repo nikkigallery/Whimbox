@@ -676,6 +676,13 @@ class BigMapMatchGuardTests(unittest.TestCase):
 
 
 class BigMapStateProviderTests(unittest.TestCase):
+    def test_bigmap_page_accepts_keyboard_and_joystick_features(self) -> None:
+        from whimbox.ui.page_assets import page_bigmap
+        from whimbox.ui.ui_assets import IconUIBigmap, IconUIBigmapJoystick
+
+        self.assertIn(IconUIBigmap, page_bigmap.check_icon_list)
+        self.assertIn(IconUIBigmapJoystick, page_bigmap.check_icon_list)
+
     def test_each_detection_uses_the_current_single_frame_result(self) -> None:
         provider = BigMapStateProvider()
         provider._detect_with_whimbox_page = Mock(side_effect=[True, False])
@@ -979,6 +986,54 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
             1.162,
         )
         self.assertAlmostEqual(_zoom_scale_for_level("miraland", "max"), 0.637)
+
+    def test_joystick_zoom_features_select_all_supported_levels(self) -> None:
+        keyboard_icons = {
+            "IconBigMapMaxScale": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScale": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScale": Mock(cap_posi=None, threshold=0.9),
+        }
+        joystick_icons = {
+            "IconBigMapMaxScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+        }
+        image = np.zeros((1080, 1920, 4), dtype=np.uint8)
+
+        with (
+            patch.multiple(
+                "whimbox.ui.ui_assets",
+                **keyboard_icons,
+                **joystick_icons,
+            ),
+            patch(
+                "whimbox.map.mask.auto_viewport_provider.crop",
+                return_value=image,
+            ),
+            patch(
+                "whimbox.interaction.interaction_core.itt.get_img_existence"
+            ) as get_img_existence,
+        ):
+            for level, icon_name in (
+                ("max", "IconBigMapMaxScaleJoyStick"),
+                ("third", "IconBigMapThirdScaleJoyStick"),
+                ("second", "IconBigMapSecondScaleJoyStick"),
+            ):
+                with self.subTest(level=level):
+                    target = joystick_icons[icon_name]
+                    get_img_existence.side_effect = (
+                        lambda icon, **_kwargs: 0.95 if icon is target else 0.0
+                    )
+                    detection = HybridAutoCenterViewportProvider(
+                        Mock()
+                    )._detect_zoom_level(image, "miraland")
+
+                    self.assertEqual(detection.status, "supported")
+                    self.assertEqual(detection.level, level)
+                    self.assertAlmostEqual(
+                        detection.reference_scale,
+                        _zoom_scale_for_level("miraland", level),
+                    )
 
     def test_hybrid_auto_center_is_the_default_mode(self) -> None:
         with patch.dict(

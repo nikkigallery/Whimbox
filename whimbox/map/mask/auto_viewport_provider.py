@@ -34,7 +34,7 @@ _MIRALAND_ZOOM_SCALE_ANCHORS = {
     "third": 1.162,
     "max": 0.637,
 }
-_ZOOM_HINT_UNSUPPORTED = "当前地图缩放过小，请点击左下角“+”放大地图"
+_ZOOM_HINT_UNSUPPORTED = "当前地图缩放过小，请使用左下角缩放按钮放大地图"
 _ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，目前只支持大世界地图，并建议将地图调整到最大缩放档位"
 
 
@@ -456,48 +456,64 @@ class HybridAutoCenterViewportProvider:
         from whimbox.interaction.interaction_core import itt
         from whimbox.ui.ui_assets import (
             IconBigMapMaxScale,
+            IconBigMapMaxScaleJoyStick,
             IconBigMapSecondScale,
+            IconBigMapSecondScaleJoyStick,
             IconBigMapThirdScale,
+            IconBigMapThirdScaleJoyStick,
         )
 
-        icons = (
-            ("max", IconBigMapMaxScale),
-            ("third", IconBigMapThirdScale),
-            ("second", IconBigMapSecondScale),
+        icon_groups = (
+            (
+                ("max", IconBigMapMaxScale),
+                ("third", IconBigMapThirdScale),
+                ("second", IconBigMapSecondScale),
+            ),
+            (
+                ("max", IconBigMapMaxScaleJoyStick),
+                ("third", IconBigMapThirdScaleJoyStick),
+                ("second", IconBigMapSecondScaleJoyStick),
+            ),
         )
-        best_level = ""
         best_score = float("-inf")
-        for level, icon in icons:
-            icon_cap = crop(image, icon.cap_posi)
-            score = float(
-                itt.get_img_existence(
-                    icon,
-                    ret_mode=IMG_RATE,
-                    cap=icon_cap,
+        for icons in icon_groups:
+            best_level = ""
+            group_best_score = float("-inf")
+            for level, icon in icons:
+                icon_cap = crop(image, icon.cap_posi)
+                score = float(
+                    itt.get_img_existence(
+                        icon,
+                        ret_mode=IMG_RATE,
+                        cap=icon_cap,
+                    )
                 )
-            )
-            if score >= float(icon.threshold) and score > best_score:
-                best_level = level
-                best_score = score
+                best_score = max(best_score, score)
+                if (
+                    score >= float(icon.threshold)
+                    and score > group_best_score
+                ):
+                    best_level = level
+                    group_best_score = score
 
-        if not best_level:
-            return _ZoomDetection(
-                status="unsupported",
-                level="",
-                reference_scale=None,
-                confidence=max(0.0, best_score),
-                hint=_ZOOM_HINT_UNSUPPORTED,
-            )
+            if best_level:
+                reference = _zoom_scale_for_level(
+                    map_name,
+                    best_level,
+                )
+                return _ZoomDetection(
+                    status="supported",
+                    level=best_level,
+                    reference_scale=reference,
+                    confidence=group_best_score,
+                )
 
-        reference = _zoom_scale_for_level(
-            map_name,
-            best_level,
-        )
         return _ZoomDetection(
-            status="supported",
-            level=best_level,
-            reference_scale=reference,
-            confidence=best_score,
+            status="unsupported",
+            level="",
+            reference_scale=None,
+            confidence=max(0.0, best_score),
+            hint=_ZOOM_HINT_UNSUPPORTED,
         )
 
     def _detect_tracking_first(self, image, map_name: str) -> dict[str, object]:

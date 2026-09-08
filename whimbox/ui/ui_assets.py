@@ -47,9 +47,13 @@ IconUILoading = ImgIcon(print_log=LOG_NONE, threshold=0.99)
 
 # 大地图相关
 IconUIBigmap = ImgIcon(print_log=LOG_NONE, anchor=ANCHOR_BOTTOM_LEFT)
+IconUIBigmapJoystick = ImgIcon(print_log=LOG_NONE, anchor=ANCHOR_BOTTOM_LEFT)
 IconBigMapSecondScale = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
 IconBigMapThirdScale = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
 IconBigMapMaxScale = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
+IconBigMapSecondScaleJoyStick = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
+IconBigMapThirdScaleJoyStick = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
+IconBigMapMaxScaleJoyStick = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(155, 255), anchor=ANCHOR_BOTTOM_LEFT)
 ButtonBigMapZoom = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_LEFT)
 AreaBigMapTeleportButton = Area(anchor=ANCHOR_BOTTOM_RIGHT)
 AreaBigMapRegionName = Area(anchor=ANCHOR_TOP_RIGHT)

@@ -29,21 +29,15 @@ if __name__ == "__main__":
     # cap = cv2.resize(cap, (1920, 1080))
     # cap = crop(cap, ButtonItemExpiredConfirm.cap_posi)
     # print(itt.get_img_existence(ButtonItemExpiredConfirm, cap=cap, ret_mode=IMG_RATE, show_res=True))
-    # while True:
-    #     print(itt.get_img_existence(ButtonLogin, ret_mode=IMG_RATE, show_res=True))
-    #     # cv2.imshow("cap", itt.capture(AreaBlessHuanjingDifficulty3.position))
-    #     # cv2.waitKey(1)
-    #     time.sleep(0.5)
-    # # ui_control.goto_page(page_huanjing_bless)
+    while True:
+        print(itt.get_img_existence(IconPageMainFeature, ret_mode=IMG_RATE, show_res=True))
+        # cv2.imshow("cap", itt.capture(AreaBlessHuanjingDifficulty3.position))
+        # cv2.waitKey(1)
+        time.sleep(0.5)
+    # ui_control.goto_page(page_huanjing_bless)
     
     # while True:
     #     print(itt.ocr_single_line(AreaLoginOCR))
     #     time.sleep(0.2)
-    
-    times = 10
-    while times > 0:
-        times -= 1
-        itt.key_down(keybind.KEYBIND_FORWARD)
-        time.sleep(0.5)
 
 

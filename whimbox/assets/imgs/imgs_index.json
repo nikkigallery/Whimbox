@@ -503,11 +503,20 @@
   "IconBigMapMaxScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapMaxScale.png"
   },
+  "IconBigMapMaxScaleJoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapMaxScaleJoyStick.png"
+  },
   "IconBigMapSecondScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScale.png"
   },
+  "IconBigMapSecondScaleJoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScaleJoyStick.png"
+  },
   "IconBigMapThirdScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScale.png"
+  },
+  "IconBigMapThirdScaleJoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScaleJoyStick.png"
   },
   "IconClickSkip": {
     "rel_path": "imgs\\Windows\\General\\IconClickSkip.png"
@@ -631,6 +640,9 @@
   },
   "IconUIBigmap": {
     "rel_path": "imgs\\Windows\\BigMap\\IconUIBigmap.png"
+  },
+  "IconUIBigmapJoystick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconUIBigmapJoystick.png"
   },
   "IconUIDig": {
     "rel_path": "imgs\\Windows\\UI\\dig\\IconUIDig.png"
