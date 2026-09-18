@@ -74,9 +74,13 @@ class StartGameTask(TaskTemplate):
                 retry_time -= 1
                 continue
             elif "运行中" in text:
-                self.log_to_gui("游戏可能刚刚关闭，稍等片刻")
+                self.log_to_gui("游戏可能刚关闭，或刚打开运行，请稍等片刻")
                 time.sleep(5)
-                continue
+                HANDLE_OBJ.refresh_handle()
+                if HANDLE_OBJ.get_handle():
+                    return
+                else:
+                    continue
             elif "更新" in text:
                 self.log_to_gui("更新游戏中……")
                 launcher_handle.set_foreground()
