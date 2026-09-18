@@ -55,7 +55,8 @@ class EnterGameTask(TaskTemplate):
                 # 不能点击屏幕中央，点到中央的月卡图标会无法跳过。
                 itt.move_and_click((1920/2, 900))
                 # 月卡界面会覆盖在道具过期弹窗前，点月卡时，顺便把道具弹窗也点了
-                wait_until_appear_then_click(ButtonItemExpiredConfirm, retry_time=1) 
+                # wait_until_appear_then_click(ButtonItemExpiredConfirm, retry_time=1) 
+                wait_until_appear_then_click(TextUnexceptedPopupConfirm, retry_time=1)
     
     def handle_finally(self):
         pass
