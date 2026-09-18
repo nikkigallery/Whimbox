@@ -76,14 +76,18 @@ class ChangeAccountTask(TaskTemplate):
     @register_step("退出登录")
     def step_logout(self):
         times = 30
+        showRegisterLoginButtonTimes = 0
         while times > 0:
             times -= 1
             if self.need_stop():
               break  
             itt.delay(1, comment="等待进入登录界面")
             if itt.get_text_existence(TextRegisterLoginButton):
-                # 如果当前已经是退出登录状态，直接去下一步
-                return
+                showRegisterLoginButtonTimes += 1
+                # 如果当前已经是退出登录状态，直接去下一步，
+                # 从游戏中退出到登录界面，注册登录按钮会一闪而过，所以要等待稳定
+                if showRegisterLoginButtonTimes > 3:
+                    return
             elif itt.get_img_existence(ButtonExitLogout):
                 itt.delay(3, comment="等待退出账号按钮真正可交互")
                 ButtonExitLogout.click()
