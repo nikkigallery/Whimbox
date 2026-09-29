@@ -80,6 +80,19 @@ class MiniMapPositionTracker:
     def status(self) -> str:
         return self._status
 
+    def reset(self) -> None:
+        self._detector = None
+        self._status = "uninitialized"
+        self._map_name = ""
+        self._confidence = 0.0
+        self._local_confidence = 0.0
+        self._reset_failure_streak()
+        self._last_update_monotonic = 0.0
+        self._has_seen_main_world = False
+        self._last_main_world_open = False
+        self._main_world_hidden_since = None
+        self._clear_revalidation()
+
     def initialize(self, position: tuple[float, float], map_name: str) -> bool:
         if map_name not in MINIMAP_POSITION_SCALE_DICT:
             logger.warning(

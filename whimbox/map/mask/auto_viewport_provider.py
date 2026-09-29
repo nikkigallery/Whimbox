@@ -15,6 +15,7 @@ from whimbox.common.logger import logger
 from whimbox.map.detection.cvars import (
     BIGMAP_POSITION_SCALE_DICT,
     BIGMAP_SEARCH_SCALE,
+    MAP_NAME_WANXIANG,
 )
 from whimbox.map.detection.map_assets import MAP_ASSETS_DICT
 
@@ -28,14 +29,20 @@ from .viewport_provider import ViewportResult
 if TYPE_CHECKING:
     from .viewport_provider import ManualCalibrationViewportProvider
 
-
 _MIRALAND_ZOOM_SCALE_ANCHORS = {
     "second": 2.784,
     "third": 1.162,
     "max": 0.637,
 }
+_WANXIANG_ZOOM_SCALE_ANCHORS = {
+    "first": 1.41,
+    "second": 0.91,
+    "third": 0.621,
+}
+_ZOOM_HINT_DEBOUNCE_SECONDS = 0.3
+_MATCHING_HINT_DEBOUNCE_SECONDS = 0.3
 _ZOOM_HINT_UNSUPPORTED = "当前地图缩放过小，请使用左下角缩放按钮放大地图"
-_ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，目前只支持大世界地图，并建议将地图调整到最大缩放档位"
+_ZOOM_HINT_LOW_CONFIDENCE = "暂时无法定位地图，建议使用左下角缩放按钮切换到固定缩放档位"
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +167,11 @@ class HybridAutoCenterViewportProvider:
         self._matching_status = "matching_failed"
         self._matching_rejection_reason = ""
         self._low_confidence_active = False
+        self._unsupported_zoom_since_monotonic: float | None = None
+        self._unsupported_zoom_map_name = ""
+        self._matching_failure_since_monotonic: float | None = None
+        self._matching_failure_key: tuple[str, str] | None = None
+        self._tracking_zoom_key: tuple[str, str] | None = None
         self._zoom_detection = _ZoomDetection(
             status="unknown",
             level="",
@@ -196,6 +208,10 @@ class HybridAutoCenterViewportProvider:
             )
 
         if self._zoom_detection.status != "supported":
+            self._reset_matching_failure_hint()
+            overlay_hint = self._debounced_unsupported_zoom_hint(
+                resolved_map_name,
+            )
             self._reset_center_tracking()
             return ViewportResult(
                 viewport=None,
@@ -204,8 +220,11 @@ class HybridAutoCenterViewportProvider:
                 fallback_used=True,
                 fallback_reason="supported big-map zoom level was not detected",
                 stale=True,
-                **self._zoom_result_fields(),
+                **self._zoom_result_fields(hint_override=overlay_hint),
             )
+
+        self._reset_unsupported_zoom_hint()
+        self._prepare_zoom_tracking(resolved_map_name)
 
         base = self.manual_provider.get_viewport(map_name=map_name)
         if base.viewport is None:
@@ -417,6 +436,7 @@ class HybridAutoCenterViewportProvider:
                 **self._zoom_result_fields(),
             )
             self._last_good_result = result
+            self._reset_matching_failure_hint()
             return result
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"hybrid auto viewport detection failed: {exc}")
@@ -455,26 +475,46 @@ class HybridAutoCenterViewportProvider:
         from whimbox.common.cvars import IMG_RATE
         from whimbox.interaction.interaction_core import itt
         from whimbox.ui.ui_assets import (
+            IconBigMapFirstScale2,
+            IconBigMapFirstScale2JoyStick,
             IconBigMapMaxScale,
             IconBigMapMaxScaleJoyStick,
             IconBigMapSecondScale,
+            IconBigMapSecondScale2,
+            IconBigMapSecondScale2JoyStick,
             IconBigMapSecondScaleJoyStick,
             IconBigMapThirdScale,
+            IconBigMapThirdScale2,
+            IconBigMapThirdScale2JoyStick,
             IconBigMapThirdScaleJoyStick,
         )
 
-        icon_groups = (
-            (
-                ("max", IconBigMapMaxScale),
-                ("third", IconBigMapThirdScale),
-                ("second", IconBigMapSecondScale),
-            ),
-            (
-                ("max", IconBigMapMaxScaleJoyStick),
-                ("third", IconBigMapThirdScaleJoyStick),
-                ("second", IconBigMapSecondScaleJoyStick),
-            ),
-        )
+        if map_name == MAP_NAME_WANXIANG:
+            icon_groups = (
+                (
+                    ("first", IconBigMapFirstScale2),
+                    ("second", IconBigMapSecondScale2),
+                    ("third", IconBigMapThirdScale2),
+                ),
+                (
+                    ("first", IconBigMapFirstScale2JoyStick),
+                    ("second", IconBigMapSecondScale2JoyStick),
+                    ("third", IconBigMapThirdScale2JoyStick),
+                ),
+            )
+        else:
+            icon_groups = (
+                (
+                    ("max", IconBigMapMaxScale),
+                    ("third", IconBigMapThirdScale),
+                    ("second", IconBigMapSecondScale),
+                ),
+                (
+                    ("max", IconBigMapMaxScaleJoyStick),
+                    ("third", IconBigMapThirdScaleJoyStick),
+                    ("second", IconBigMapSecondScaleJoyStick),
+                ),
+            )
         best_score = float("-inf")
         for icons in icon_groups:
             best_level = ""
@@ -515,6 +555,53 @@ class HybridAutoCenterViewportProvider:
             confidence=max(0.0, best_score),
             hint=_ZOOM_HINT_UNSUPPORTED,
         )
+
+    def _debounced_unsupported_zoom_hint(self, map_name: str) -> str:
+        now = time.monotonic()
+        if (
+            self._unsupported_zoom_since_monotonic is None
+            or self._unsupported_zoom_map_name != map_name
+        ):
+            self._unsupported_zoom_since_monotonic = now
+            self._unsupported_zoom_map_name = map_name
+            return ""
+        if (
+            now - self._unsupported_zoom_since_monotonic
+            < _ZOOM_HINT_DEBOUNCE_SECONDS
+        ):
+            return ""
+        return self._zoom_detection.hint
+
+    def _reset_unsupported_zoom_hint(self) -> None:
+        self._unsupported_zoom_since_monotonic = None
+        self._unsupported_zoom_map_name = ""
+
+    def _prepare_zoom_tracking(self, map_name: str) -> None:
+        zoom_key = (map_name, self._zoom_detection.level)
+        if self._tracking_zoom_key not in {None, zoom_key}:
+            self._reset_tracking()
+        self._tracking_zoom_key = zoom_key
+
+    def _debounced_matching_failure_hint(self, map_name: str) -> str:
+        now = time.monotonic()
+        failure_key = (map_name, self._zoom_detection.level)
+        if (
+            self._matching_failure_since_monotonic is None
+            or self._matching_failure_key != failure_key
+        ):
+            self._matching_failure_since_monotonic = now
+            self._matching_failure_key = failure_key
+            return ""
+        if (
+            now - self._matching_failure_since_monotonic
+            < _MATCHING_HINT_DEBOUNCE_SECONDS
+        ):
+            return ""
+        return _ZOOM_HINT_LOW_CONFIDENCE
+
+    def _reset_matching_failure_hint(self) -> None:
+        self._matching_failure_since_monotonic = None
+        self._matching_failure_key = None
 
     def _detect_tracking_first(self, image, map_name: str) -> dict[str, object]:
         local_confidence: float | None = None
@@ -891,6 +978,9 @@ class HybridAutoCenterViewportProvider:
         hide_last_good: bool = False,
     ) -> ViewportResult:
         now = time.monotonic()
+        overlay_hint = self._debounced_matching_failure_hint(
+            base.viewport.map_name,
+        )
         jump_distance = _distance_optional(
             (raw_center_x, raw_center_y),
             self._last_good_center,
@@ -951,7 +1041,7 @@ class HybridAutoCenterViewportProvider:
                 **self._cross_check_result_fields(),
                 **self._matching_result_fields(),
                 **self._zoom_result_fields(
-                    hint_override=_ZOOM_HINT_LOW_CONFIDENCE,
+                    hint_override=overlay_hint,
                 ),
                 stale=True,
             )
@@ -1018,7 +1108,7 @@ class HybridAutoCenterViewportProvider:
                     source_override="manual-calibration-fallback",
                 ),
                 **self._zoom_result_fields(
-                    hint_override=_ZOOM_HINT_LOW_CONFIDENCE,
+                    hint_override=overlay_hint,
                 ),
             )
 
@@ -1638,6 +1728,14 @@ def _zoom_scale_for_level(
     map_name: str,
     level: str,
 ) -> float:
+    if map_name == MAP_NAME_WANXIANG:
+        try:
+            return _WANXIANG_ZOOM_SCALE_ANCHORS[level]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"unsupported bigmap zoom level for {map_name!r}: {level!r}"
+            ) from exc
+
     base_scale = BIGMAP_POSITION_SCALE_DICT.get(map_name)
     if base_scale is None or not math.isfinite(base_scale) or base_scale <= 0:
         raise RuntimeError(f"bigmap scale unavailable for {map_name!r}")

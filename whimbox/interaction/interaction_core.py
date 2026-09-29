@@ -79,8 +79,11 @@ class InteractionBGD:
         else:
             return (1920/2, 1080/2)
 
-    def ocr_single_line(self, area: posi_manager.Area, padding=50, hsv_limit=None) -> str:
-        cap = self.capture(anchor_posi = area.position)
+    def ocr_single_line(self, area: posi_manager.Area, padding=50, hsv_limit=None, cap=None) -> str:
+        if cap is None:
+            cap = self.capture(anchor_posi=area.position)
+        else:
+            cap = crop(cap, area.position)
         if hsv_limit:
             cap = process_with_hsv_limit(cap, hsv_limit[0], hsv_limit[1])
         if padding:

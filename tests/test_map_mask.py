@@ -35,7 +35,11 @@ from whimbox.map.mask.pearpal_auth import (
     parse_login_storage,
 )
 from whimbox.map.mask.resource_paths import package_map_mask_dir
-from whimbox.map.mask.service import MapMaskService
+from whimbox.map.mask.region_detector import BigMapRegionDetector, _match_region_name
+from whimbox.map.mask.service import (
+    MapMaskService,
+    _viewport_match_needs_region_ocr,
+)
 from whimbox.map.mask.viewport_provider import (
     MapMaskViewportProvider,
     ViewportResult,
@@ -162,6 +166,42 @@ class FakePearPalClient:
         }, None
 
 
+class FakeWanxiangPearPalClient(FakePearPalClient):
+    def fetch_spawners(self, world_id: str):
+        if str(world_id) != "4020034":
+            return super().fetch_spawners(world_id)
+        return [
+            {
+                "id": 400,
+                "world_id": 4020034,
+                "catalog": 244,
+                "x": 100640.648268,
+                "y": 57032.078271,
+            },
+            {
+                "id": 401,
+                "world_id": 4020034,
+                "catalog": 245,
+                "x": 120000,
+                "y": 90000,
+            },
+            {
+                "id": 402,
+                "world_id": 4020034,
+                "catalog": 20,
+                "x": 140000,
+                "y": 100000,
+            },
+            {
+                "id": 403,
+                "world_id": 4020034,
+                "catalog": 13,
+                "x": 160000,
+                "y": 120000,
+            },
+        ], None
+
+
 class FakePearPalUserClient:
     def fetch_awarded_state(self, credentials: PearPalCredentials):
         if credentials.openid != "12405094":
@@ -214,7 +254,10 @@ class OfficialPearPalProviderTests(unittest.TestCase):
 
         provider.list_points(label_ids=[])
 
-        client.fetch_catalog.assert_called_once_with("1")
+        self.assertEqual(
+            [call.args[0] for call in client.fetch_catalog.call_args_list],
+            ["1", "4020034"],
+        )
         self.assertEqual(
             provider.get_data_status()["points_source"],
             "pearpal-public-ready",
@@ -313,6 +356,42 @@ class OfficialPearPalProviderTests(unittest.TestCase):
         self.assertEqual(provider.list_points(map_name="unsupported"), [])
         self.assertEqual(provider.list_points(label_ids=[]), [])
 
+    def test_loads_and_filters_wanxiang_collectibles(self) -> None:
+        provider = OfficialPearPalProvider(
+            enabled=True,
+            client=FakeWanxiangPearPalClient(),
+            background=False,
+        )
+
+        points = provider.list_points(map_name="wanxiang")
+        point_by_id = {point.id: point for point in points}
+
+        self.assertEqual(
+            set(point_by_id),
+            {
+                "pearpal:4020034:400",
+                "pearpal:4020034:401",
+                "pearpal:4020034:402",
+                "pearpal:4020034:403",
+            },
+        )
+        self.assertEqual(point_by_id["pearpal:4020034:400"].label_id, "pearpal_star")
+        self.assertEqual(point_by_id["pearpal:4020034:401"].label_id, "pearpal_dewdrop")
+        self.assertEqual(point_by_id["pearpal:4020034:402"].label_id, "pearpal_read")
+        self.assertEqual(point_by_id["pearpal:4020034:403"].label_id, "pearpal_box")
+        self.assertAlmostEqual(
+            point_by_id["pearpal:4020034:400"].image_x,
+            100640.648268 * 2 / 90,
+        )
+        self.assertAlmostEqual(
+            point_by_id["pearpal:4020034:400"].image_y,
+            57032.078271 * 2 / 90,
+        )
+        self.assertTrue(all(point.map_name == "wanxiang" for point in points))
+        self.assertFalse(
+            any(point.map_name == "wanxiang" for point in provider.list_points(map_name="miraland"))
+        )
+
     def test_public_api_error_is_reported_without_sample_fallback(self) -> None:
         provider = OfficialPearPalProvider(
             enabled=True,
@@ -324,6 +403,42 @@ class OfficialPearPalProviderTests(unittest.TestCase):
         status = provider.get_data_status()
         self.assertEqual(status["points_source"], "pearpal-public-error")
         self.assertIn("public API unavailable", status["points_error"])
+
+
+class BigMapRegionDetectorTests(unittest.TestCase):
+    def test_matches_supported_region_name_from_ocr_text(self) -> None:
+        self.assertEqual(_match_region_name("当前区域：万相境"), "万相境")
+        self.assertEqual(_match_region_name(" 花愿镇 "), "花愿镇")
+        self.assertIsNone(_match_region_name("无法识别"))
+
+    @patch("whimbox.map.mask.region_detector._ocr_region_name")
+    def test_switches_between_miraland_and_wanxiang(self, ocr_region_name) -> None:
+        detector = BigMapRegionDetector()
+        ocr_region_name.return_value = "万相境"
+
+        map_name, changed = detector.update(None, is_bigmap_open=True)
+
+        self.assertEqual(map_name, "wanxiang")
+        self.assertTrue(changed)
+        detector.update(None, is_bigmap_open=False)
+        ocr_region_name.return_value = "花愿镇"
+
+        map_name, changed = detector.update(None, is_bigmap_open=True)
+
+        self.assertEqual(map_name, "miraland")
+        self.assertTrue(changed)
+
+    @patch("whimbox.map.mask.region_detector._ocr_region_name")
+    def test_confirmed_cached_map_skips_region_ocr(self, ocr_region_name) -> None:
+        detector = BigMapRegionDetector()
+        detector.request_refresh()
+
+        detector.confirm_current_map()
+        map_name, changed = detector.update(None, is_bigmap_open=True)
+
+        self.assertEqual(map_name, "miraland")
+        self.assertFalse(changed)
+        ocr_region_name.assert_not_called()
 
 
 class PearPalUserStateTests(unittest.TestCase):
@@ -923,6 +1038,37 @@ class GameWindowStateRpcTests(unittest.TestCase):
 
 
 class AutomaticViewportTrackingTests(unittest.TestCase):
+    def test_reacquire_pending_does_not_request_region_ocr(self) -> None:
+        pending = ViewportResult(
+            viewport=None,
+            mode="hybrid-auto-center",
+            source="reacquire-pending",
+            zoom_status="supported",
+            zoom_level="third",
+            matching_status="matching_accepted",
+        )
+
+        self.assertFalse(_viewport_match_needs_region_ocr(pending))
+
+    def test_real_map_match_failures_request_region_ocr(self) -> None:
+        low_confidence = ViewportResult(
+            viewport=None,
+            mode="hybrid-auto-center",
+            source="matching-rejected",
+            zoom_status="supported",
+            zoom_level="third",
+            matching_status="matching_failed",
+        )
+        wrong_zoom_icons = ViewportResult(
+            viewport=None,
+            mode="hybrid-auto-center",
+            source="unsupported-bigmap-zoom",
+            zoom_status="unsupported",
+        )
+
+        self.assertTrue(_viewport_match_needs_region_ocr(low_confidence))
+        self.assertTrue(_viewport_match_needs_region_ocr(wrong_zoom_icons))
+
     def test_low_confidence_log_is_emitted_once_until_recovery(self) -> None:
         provider = HybridAutoCenterViewportProvider(Mock())
         with patch(
@@ -976,6 +1122,75 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
         self.assertEqual(result.zoom_status, "unsupported")
         self.assertEqual(result.overlay_hint, "请使用左下角缩放按钮")
 
+    def test_unsupported_zoom_hint_is_debounced(self) -> None:
+        provider = HybridAutoCenterViewportProvider(Mock())
+        provider._detect_zoom_level = Mock(
+            return_value=_ZoomDetection(
+                status="unsupported",
+                level="",
+                reference_scale=None,
+                confidence=0.0,
+                hint="当前地图缩放过小，请使用左下角缩放按钮放大地图",
+            )
+        )
+        image = np.zeros((1080, 1920, 4), dtype=np.uint8)
+
+        with patch(
+            "whimbox.map.mask.auto_viewport_provider.time.monotonic",
+            return_value=10.0,
+        ) as monotonic:
+            first = provider.get_viewport(
+                map_name="miraland",
+                captured_image=image,
+            )
+            monotonic.return_value = 10.2
+            second = provider.get_viewport(
+                map_name="miraland",
+                captured_image=image,
+            )
+            monotonic.return_value = 10.31
+            third = provider.get_viewport(
+                map_name="miraland",
+                captured_image=image,
+            )
+
+        self.assertEqual(first.overlay_hint, "")
+        self.assertEqual(second.overlay_hint, "")
+        self.assertIn("缩放过小", third.overlay_hint)
+
+    def test_matching_failure_hint_is_debounced_per_zoom_level(self) -> None:
+        provider = HybridAutoCenterViewportProvider(Mock())
+        provider._zoom_detection = _ZoomDetection(
+            status="supported",
+            level="second",
+            reference_scale=2.784,
+            confidence=1.0,
+        )
+
+        with patch(
+            "whimbox.map.mask.auto_viewport_provider.time.monotonic",
+            return_value=20.0,
+        ) as monotonic:
+            first = provider._debounced_matching_failure_hint("miraland")
+            monotonic.return_value = 20.2
+            second = provider._debounced_matching_failure_hint("miraland")
+            monotonic.return_value = 20.31
+            third = provider._debounced_matching_failure_hint("miraland")
+            provider._zoom_detection = _ZoomDetection(
+                status="supported",
+                level="third",
+                reference_scale=1.162,
+                confidence=1.0,
+            )
+            after_zoom_change = provider._debounced_matching_failure_hint(
+                "miraland"
+            )
+
+        self.assertEqual(first, "")
+        self.assertEqual(second, "")
+        self.assertIn("暂时无法定位地图", third)
+        self.assertEqual(after_zoom_change, "")
+
     def test_miraland_zoom_profiles_use_measured_anchor_scales(self) -> None:
         self.assertAlmostEqual(
             _zoom_scale_for_level("miraland", "second"),
@@ -986,6 +1201,11 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
             1.162,
         )
         self.assertAlmostEqual(_zoom_scale_for_level("miraland", "max"), 0.637)
+
+    def test_wanxiang_zoom_profiles_use_measured_anchor_scales(self) -> None:
+        self.assertAlmostEqual(_zoom_scale_for_level("wanxiang", "first"), 1.41)
+        self.assertAlmostEqual(_zoom_scale_for_level("wanxiang", "second"), 0.91)
+        self.assertAlmostEqual(_zoom_scale_for_level("wanxiang", "third"), 0.621)
 
     def test_joystick_zoom_features_select_all_supported_levels(self) -> None:
         keyboard_icons = {
@@ -1033,6 +1253,54 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
                     self.assertAlmostEqual(
                         detection.reference_scale,
                         _zoom_scale_for_level("miraland", level),
+                    )
+
+    def test_wanxiang_zoom_features_select_all_supported_levels(self) -> None:
+        keyboard_icons = {
+            "IconBigMapFirstScale2": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScale2": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScale2": Mock(cap_posi=None, threshold=0.9),
+        }
+        joystick_icons = {
+            "IconBigMapFirstScale2JoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScale2JoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScale2JoyStick": Mock(cap_posi=None, threshold=0.9),
+        }
+        image = np.zeros((1080, 1920, 4), dtype=np.uint8)
+
+        with (
+            patch.multiple(
+                "whimbox.ui.ui_assets",
+                **keyboard_icons,
+                **joystick_icons,
+            ),
+            patch(
+                "whimbox.map.mask.auto_viewport_provider.crop",
+                return_value=image,
+            ),
+            patch(
+                "whimbox.interaction.interaction_core.itt.get_img_existence"
+            ) as get_img_existence,
+        ):
+            for level, icon_name in (
+                ("first", "IconBigMapFirstScale2JoyStick"),
+                ("second", "IconBigMapSecondScale2JoyStick"),
+                ("third", "IconBigMapThirdScale2JoyStick"),
+            ):
+                with self.subTest(level=level):
+                    target = joystick_icons[icon_name]
+                    get_img_existence.side_effect = (
+                        lambda icon, **_kwargs: 0.95 if icon is target else 0.0
+                    )
+                    detection = HybridAutoCenterViewportProvider(
+                        Mock()
+                    )._detect_zoom_level(image, "wanxiang")
+
+                    self.assertEqual(detection.status, "supported")
+                    self.assertEqual(detection.level, level)
+                    self.assertAlmostEqual(
+                        detection.reference_scale,
+                        _zoom_scale_for_level("wanxiang", level),
                     )
 
     def test_hybrid_auto_center_is_the_default_mode(self) -> None:

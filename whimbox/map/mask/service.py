@@ -20,6 +20,7 @@ from .mouse_wheel_guard import MouseWheelGuard
 from .pearpal_auth import parse_login_storage
 from .pearpal_provider import OfficialPearPalProvider
 from .provider import MapMaskProvider
+from .region_detector import BigMapRegionDetector
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 
@@ -42,6 +43,7 @@ class MapMaskService:
         self.official_provider = OfficialPearPalProvider(enabled=use_pearpal)
         self.viewport_provider = MapMaskViewportProvider()
         self.bigmap_state_provider = BigMapStateProvider()
+        self.region_detector = BigMapRegionDetector()
         self.minimap_tracker = MiniMapPositionTracker()
         self.provider: MapMaskProvider = (
             self.official_provider if use_pearpal else self.local_provider
@@ -91,6 +93,7 @@ class MapMaskService:
             if not worker_running:
                 self._detection_snapshot = None
                 self._detection_wake.clear()
+                self.region_detector.request_refresh()
             self._ensure_detection_thread_locked()
             if worker_running and map_changed:
                 self._detection_wake.set()
@@ -129,7 +132,7 @@ class MapMaskService:
                             self._detection_thread = None
                             self._detection_snapshot = None
                         break
-                    map_name = self._detection_map_name
+                    requested_map_name = self._detection_map_name
 
                 try:
                     with self._detection_provider_lock:
@@ -142,12 +145,56 @@ class MapMaskService:
                         self._wheel_bigmap_open = bool(bigmap_state.is_bigmap_open)
                         self._wheel_bigmap_detection_monotonic = time.monotonic()
 
+                        if (
+                            requested_map_name is not None
+                            or not bigmap_state.is_bigmap_open
+                        ):
+                            map_name, active_map_changed = self.region_detector.update(
+                                captured_image,
+                                is_bigmap_open=bigmap_state.is_bigmap_open,
+                                requested_map_name=requested_map_name,
+                            )
+                        else:
+                            map_name = self.region_detector.map_name
+                            active_map_changed = False
+                        if active_map_changed:
+                            self.minimap_tracker.reset()
+                            self._minimap_calibration_active = True
+                            self._minimap_calibration_deadline = (
+                                time.monotonic()
+                                + _MINIMAP_CALIBRATION_TIMEOUT_SECONDS
+                            )
+
                         self._update_minimap_calibration_attempt(bigmap_state)
                         viewport_result = self._detect_viewport_result(
                             map_name=map_name,
                             is_bigmap_open=bigmap_state.is_bigmap_open,
                             captured_image=captured_image,
                         )
+                        if requested_map_name is None and bigmap_state.is_bigmap_open:
+                            if _viewport_match_succeeded(viewport_result):
+                                self.region_detector.confirm_current_map()
+                            elif _viewport_match_needs_region_ocr(viewport_result):
+                                self.region_detector.request_refresh()
+                                detected_map_name, active_map_changed = (
+                                    self.region_detector.update(
+                                        captured_image,
+                                        is_bigmap_open=True,
+                                    )
+                                )
+                                if active_map_changed:
+                                    map_name = detected_map_name
+                                    self.minimap_tracker.reset()
+                                    self._minimap_calibration_active = True
+                                    self._minimap_calibration_deadline = (
+                                        time.monotonic()
+                                        + _MINIMAP_CALIBRATION_TIMEOUT_SECONDS
+                                    )
+                                    viewport_result = self._detect_viewport_result(
+                                        map_name=map_name,
+                                        is_bigmap_open=True,
+                                        captured_image=captured_image,
+                                    )
                         self._try_calibrate_minimap(viewport_result)
                         minimap_snapshot = self.minimap_tracker.update(
                             captured_image,
@@ -804,6 +851,23 @@ def _viewport_projection_cache_key(
         viewport.screen_height,
         viewport.scale,
         viewport.rotation,
+    )
+
+
+def _viewport_match_succeeded(viewport_result: ViewportResult) -> bool:
+    return bool(
+        viewport_result.viewport is not None
+        and viewport_result.zoom_status == "supported"
+        and viewport_result.matching_status
+        not in {"matching_failed", "matching_ambiguous"}
+    )
+
+
+def _viewport_match_needs_region_ocr(viewport_result: ViewportResult) -> bool:
+    return bool(
+        viewport_result.zoom_status in {"unsupported", "error"}
+        or viewport_result.matching_status
+        in {"matching_failed", "matching_ambiguous"}
     )
 
 

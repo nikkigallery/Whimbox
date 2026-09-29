@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import threading
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from whimbox.common.logger import logger
@@ -26,8 +26,22 @@ from .pearpal_debug import (
 from .pearpal_regions import normalize_pearpal_region
 
 
-_WORLD_ID = "1"
-_MAP_NAME = "miraland"
+@dataclass(frozen=True, slots=True)
+class _PearPalWorld:
+    world_id: str
+    map_name: str
+    scale_x: float = 2 / 90
+    offset_x: float = 0.0
+    scale_y: float = 2 / 90
+    offset_y: float = 0.0
+
+
+_PRIMARY_WORLD_ID = "1"
+_WORLDS = (
+    _PearPalWorld(world_id=_PRIMARY_WORLD_ID, map_name="miraland"),
+    _PearPalWorld(world_id="4020034", map_name="wanxiang"),
+)
+_WORLD_BY_MAP_NAME = {world.map_name: world for world in _WORLDS}
 _BOX_CATALOG_GROUP_ID = "14"
 # Public catalogs used for Whimstar variants in the currently known worlds.
 # World 1 currently resolves to catalog 11; keeping the complete known set here
@@ -42,13 +56,6 @@ _USER_REFRESH_PERIOD_SECONDS = 15.0
 _USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
 _USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
 
-
-# The refreshed public world-1 coordinates use the same standard 2/90 scale as
-# the Whimbox full-resolution map and no additional web-map origin offset.
-_MIRALAND_SCALE_X = 2 / 90
-_MIRALAND_OFFSET_X = 0.0
-_MIRALAND_SCALE_Y = 2 / 90
-_MIRALAND_OFFSET_Y = 0.0
 
 _STAR_LABEL = MapMaskLabel(
     id="pearpal_star",
@@ -74,6 +81,8 @@ _READ_LABEL = MapMaskLabel(
     provider="pearpal",
     default_enabled=True,
 )
+
+
 class OfficialPearPalProvider:
     """Anonymous PearPal public point provider.
 
@@ -157,7 +166,7 @@ class OfficialPearPalProvider:
         map_name: str | None = None,
     ) -> list[MapMaskPoint]:
         self._ensure_load_started()
-        if map_name and map_name != _MAP_NAME:
+        if map_name and map_name not in _WORLD_BY_MAP_NAME:
             return []
         with self._lock:
             points = self._points
@@ -168,6 +177,7 @@ class OfficialPearPalProvider:
             point
             for point in points
             if (selected is None or point.label_id in selected)
+            and (map_name is None or point.map_name == map_name)
             and (
                 not hide_awarded
                 or not self._is_point_awarded(point, awarded_state)
@@ -204,8 +214,10 @@ class OfficialPearPalProvider:
             "points_error": error,
             "point_count": point_count,
             "anonymous": True,
-            "world_id": _WORLD_ID,
-            "map_name": _MAP_NAME,
+            "world_id": _PRIMARY_WORLD_ID,
+            "map_name": "miraland",
+            "world_ids": [world.world_id for world in _WORLDS],
+            "map_names": [world.map_name for world in _WORLDS],
             **user_status,
         }
 
@@ -646,11 +658,28 @@ class OfficialPearPalProvider:
         )
 
     def _fetch_points(self, client: Any) -> list[MapMaskPoint]:
-        catalog_response, _ = client.fetch_catalog(_WORLD_ID)
-        base_spawners, _ = client.fetch_spawners(_WORLD_ID)
         stage_spawners, _ = client.fetch_stage_spawners()
-        spawners, _ = expand_stage_spawners(base_spawners, stage_spawners)
+        points: list[MapMaskPoint] = []
+        for world in _WORLDS:
+            catalog_response, _ = client.fetch_catalog(world.world_id)
+            base_spawners, _ = client.fetch_spawners(world.world_id)
+            spawners, _ = expand_stage_spawners(base_spawners, stage_spawners)
+            points.extend(
+                self._parse_world_points(
+                    world=world,
+                    catalog_response=catalog_response,
+                    spawners=spawners,
+                )
+            )
+        return points
 
+    def _parse_world_points(
+        self,
+        *,
+        world: _PearPalWorld,
+        catalog_response: dict[str, Any],
+        spawners: list[dict[str, Any]],
+    ) -> list[MapMaskPoint]:
         catalogs = flatten_catalogs(catalog_response, self._language)
         catalog_by_id = {
             str(catalog.get("id")): catalog
@@ -680,8 +709,8 @@ class OfficialPearPalProvider:
                 label = _READ_LABEL
             else:
                 continue
-            world_id = str(spawner_world_id(raw) or _WORLD_ID)
-            if world_id != _WORLD_ID:
+            world_id = str(spawner_world_id(raw) or world.world_id)
+            if world_id != world.world_id:
                 continue
             web_x = _finite_float(raw.get("x"))
             web_y = _finite_float(raw.get("y"))
@@ -694,14 +723,19 @@ class OfficialPearPalProvider:
             point_name = description or catalog_name or f"{label.name} {source_id}"
             stage_id = spawner_stage_id(raw)
             seen_source_ids.add(source_id)
+            point_id = (
+                f"pearpal:{source_id}"
+                if world_id == _PRIMARY_WORLD_ID
+                else f"pearpal:{world_id}:{source_id}"
+            )
             points.append(
                 MapMaskPoint(
-                    id=f"pearpal:{source_id}",
+                    id=point_id,
                     label_id=label.id,
                     name=point_name,
-                    map_name=_MAP_NAME,
-                    image_x=web_x * _MIRALAND_SCALE_X + _MIRALAND_OFFSET_X,
-                    image_y=web_y * _MIRALAND_SCALE_Y + _MIRALAND_OFFSET_Y,
+                    map_name=world.map_name,
+                    image_x=web_x * world.scale_x + world.offset_x,
+                    image_y=web_y * world.scale_y + world.offset_y,
                     icon=str(catalog.get("_icon") or ""),
                     provider=self.name,
                     detail={
@@ -721,7 +755,10 @@ class OfficialPearPalProvider:
                         "is_stage_expanded": bool(raw.get("is_stage_expanded")),
                         "awarded": False,
                         "anonymous": True,
-                        "coordinate_transform": "pearpal-world-1-to-miraland-v12-standard",
+                        "coordinate_transform": (
+                            f"pearpal-world-{world_id}-to-"
+                            f"{world.map_name}-standard-2-over-90"
+                        ),
                     },
                 )
             )
