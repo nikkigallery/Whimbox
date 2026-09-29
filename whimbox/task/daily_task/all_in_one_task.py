@@ -48,7 +48,7 @@ class AllInOneTask(TaskTemplate):
         self.pre_custom_step_results = []
         self.post_custom_step_results = []
         self.change_account_enabled = global_config.get_bool("OneDragon", "change_account", False)
-        self.auto_close_game_enabled = global_config.get_bool("OneDragon", "auto_close_game", False)
+        self.finish_actions = self._load_finish_actions()
         self.account_list = []
         self.finished_account_list = []
         self.current_account = ""
@@ -63,6 +63,23 @@ class AllInOneTask(TaskTemplate):
             key: global_config.get_bool("OneDragonDefaultSteps", key, True)
             for key, _, _ in DEFAULT_STEP_CONFIG
         }
+
+    def _load_finish_actions(self):
+        raw_actions = global_config.get("OneDragon", "auto_close_game", [])
+        if isinstance(raw_actions, list):
+            valid_actions = {"关闭游戏", "关闭奇想盒", "关机"}
+            return {
+                str(action) for action in raw_actions
+                if str(action) in valid_actions
+            }
+
+        # 兼容尚未经过配置迁移的旧布尔值。
+        enabled = (
+            raw_actions is True
+            or isinstance(raw_actions, str)
+            and raw_actions.lower() in ("true", "1", "yes", "on")
+        )
+        return {"关闭游戏", "关闭奇想盒"} if enabled else set()
 
     def _load_custom_steps(self, section_name):
         raw_items = global_config.get(section_name, "items", [])
@@ -132,8 +149,8 @@ class AllInOneTask(TaskTemplate):
 
         step_order.append("step8")
 
-        if self.auto_close_game_enabled:
-            step_order.append("step_close_game")
+        if self.finish_actions:
+            step_order.append("step_finish_actions")
             
         self.step_order = step_order
 
@@ -492,22 +509,29 @@ class AllInOneTask(TaskTemplate):
             },
         )
 
-    @register_step("关闭游戏和奇想盒")
-    def step_close_game(self):
-        task_result = CloseGameTask(self.session_id).task_run()
-        if task_result.status == STATE_TYPE_STOP:
-            self.update_task_result(status=STATE_TYPE_STOP, message=task_result.message or "任务已停止")
-            return STEP_NAME_FINISH
-        if task_result.status != STATE_TYPE_SUCCESS:
-            self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message or "关闭游戏失败")
-            return STEP_NAME_FINISH
-        emit_event(
-            "event.app.quit",
-            {
-                "reason": "one_dragon_completed",
-                "session_id": self.session_id,
-            },
-        )
+    @register_step("执行一条龙结束操作")
+    def step_finish_actions(self):
+        if "关闭游戏" in self.finish_actions:
+            task_result = CloseGameTask(self.session_id).task_run()
+            if task_result.status == STATE_TYPE_STOP:
+                self.update_task_result(status=STATE_TYPE_STOP, message=task_result.message or "任务已停止")
+                return STEP_NAME_FINISH
+            if task_result.status != STATE_TYPE_SUCCESS:
+                self.update_task_result(status=STATE_TYPE_FAILED, message=task_result.message or "关闭游戏失败")
+                return STEP_NAME_FINISH
+
+        quit_app = "关闭奇想盒" in self.finish_actions
+        shutdown_computer = "关机" in self.finish_actions
+        if quit_app or shutdown_computer:
+            emit_event(
+                "event.app.finish_actions",
+                {
+                    "reason": "one_dragon_completed",
+                    "session_id": self.session_id,
+                    "quit_app": quit_app,
+                    "shutdown_computer": shutdown_computer,
+                },
+            )
 
     def handle_finally(self):
         # 有可能最后一步是关闭游戏，要额外判断一下避免finally时报错
@@ -516,9 +540,9 @@ class AllInOneTask(TaskTemplate):
 
 if __name__ == "__main__":
     task = AllInOneTask(session_id="debug")
-    # result = task.task_run()
-    task._quit_to_login()
-    task.step_change_account()
+    result = task.task_run()
+    # task._quit_to_login()
+    # task.step_change_account()
     # print(result.to_dict())
     # task.step_check_in_home()
     # task.step_home_task()

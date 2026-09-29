@@ -79,6 +79,17 @@ class GlobalConfig:
                                     user_config[section_name][key]['value'] = []
                                 else:
                                     user_config[section_name][key]['value'] = [old_value]
+                        if section_name == 'OneDragon' and key == 'auto_close_game' and 'value' in user_config[section_name][key]:
+                            old_value = user_config[section_name][key]['value']
+                            if not isinstance(old_value, list):
+                                enabled = (
+                                    old_value is True
+                                    or isinstance(old_value, str)
+                                    and old_value.lower() in ('true', '1', 'yes', 'on')
+                                )
+                                user_config[section_name][key]['value'] = (
+                                    ['关闭游戏', '关闭奇想盒'] if enabled else []
+                                )
             
             # 删除已经不存在的配置项
             sections_to_delete = [section_name for section_name in user_config 

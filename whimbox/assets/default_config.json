@@ -85,8 +85,8 @@
             "description": "为所有账号运行一条龙"
         },
         "auto_close_game": {
-            "value": "false",
-            "description": "一条龙结束后，关闭游戏和奇想盒"
+            "value": [],
+            "description": "一条龙结束后（可多选）"
         },
         "start_magnet": {
             "value": "false",

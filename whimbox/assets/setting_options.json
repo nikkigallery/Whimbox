@@ -62,6 +62,11 @@
         "闪光粒子",
         "噗灵x20000"
     ],
+    "auto_close_game": [
+        "关闭游戏",
+        "关闭奇想盒",
+        "关机"
+    ],
     "model_provider": [
         "openai",
         "anthropic",
