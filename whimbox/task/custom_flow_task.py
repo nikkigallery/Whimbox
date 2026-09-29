@@ -110,7 +110,7 @@ class CustomFlowTask(TaskTemplate):
 
         self.update_task_result(
             status=STATE_TYPE_FAILED if has_failed else STATE_TYPE_SUCCESS,
-            message="\n".join(result_lines),
+            message="\n" + "\n".join(result_lines),
             data={"items": enabled_items},
         )
 

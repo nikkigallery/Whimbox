@@ -41,7 +41,7 @@ class CustomFlowTaskTests(unittest.TestCase):
         )
         task.update_task_result.assert_called_once_with(
             status=STATE_TYPE_SUCCESS,
-            message="✅跑图脚本：路线A已完成\n✅宏脚本：宏C已完成",
+            message="\n✅跑图脚本：路线A已完成\n✅宏脚本：宏C已完成",
             data={"items": [items[0], items[2]]},
         )
 
@@ -62,7 +62,7 @@ class CustomFlowTaskTests(unittest.TestCase):
         self.assertEqual(2, task._run_item.call_count)
         task.update_task_result.assert_called_once_with(
             status=STATE_TYPE_FAILED,
-            message="❌跑图脚本：路线A执行失败：失败原因\n✅宏脚本：宏B已完成",
+            message="\n❌跑图脚本：路线A执行失败：失败原因\n✅宏脚本：宏B已完成",
             data={"items": items},
         )
 
