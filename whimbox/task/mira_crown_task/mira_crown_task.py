@@ -24,7 +24,7 @@ class MiraCrownTask(TaskTemplate):
             self.log_to_gui(f"检查奇迹之冠巅峰赛进度识别异常:{count_str}", is_error=True)
             return False
         self.log_to_gui(f"奇迹之冠巅峰赛进度为{finished_count}/{total_count}")
-        if finished_count != 0:
+        if finished_count > 12:
             self.log_to_gui("奇迹之冠巅峰赛已做过，直接跳过")
             return False
         else:
