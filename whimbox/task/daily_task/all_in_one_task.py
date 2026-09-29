@@ -516,7 +516,9 @@ class AllInOneTask(TaskTemplate):
 
 if __name__ == "__main__":
     task = AllInOneTask(session_id="debug")
-    result = task.task_run()
+    # result = task.task_run()
+    task._quit_to_login()
+    task.step_change_account()
     # print(result.to_dict())
     # task.step_check_in_home()
     # task.step_home_task()

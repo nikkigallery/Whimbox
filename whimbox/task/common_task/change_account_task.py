@@ -89,8 +89,12 @@ class ChangeAccountTask(TaskTemplate):
                 if showRegisterLoginButtonTimes > 3:
                     return
             elif itt.get_img_existence(ButtonExitLogout):
-                itt.delay(3, comment="等待退出账号按钮真正可交互")
-                ButtonExitLogout.click()
+                # 退出登录按钮第一点可能没反应，多点几次，直到按钮消失
+                while not self.need_stop():
+                    ButtonExitLogout.click()
+                    time.sleep(1)
+                    if not itt.get_img_existence(ButtonExitLogout):
+                        break
                 while not self.need_stop():
                     itt.delay(1)
                     text_box_dict = itt.ocr_and_detect_posi(AreaLoginOCR)
