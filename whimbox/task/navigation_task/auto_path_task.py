@@ -66,7 +66,7 @@ class AutoPathTask(TaskTemplate):
         else:
             raise ValueError("path_record和path_name不能同时为空")
         
-        if self.path_info.version not in ("2.0", "2.1"):
+        if self.path_info.version not in ("2.0", "2.1", "2.2"):
             raise ValueError("路线版本不匹配，请更新路线")
         
         # 路线脚本中的坐标为游戏原生坐标，whimbox使用时需要转换为图片像素坐标
@@ -491,6 +491,10 @@ class AutoPathTask(TaskTemplate):
                     time.sleep(float(wait_time))
                 elif self.target_point.action == ACTION_KEY_CLICK:
                     itt.key_press(self.target_point.action_params)
+                elif self.target_point.action == ACTION_GAME_KEY_CLICK:
+                    itt.key_press(
+                        keybind.resolve_game_key(self.target_point.action_params)
+                    )
                 elif self.target_point.action == ACTION_MINIGAME:
                     macro_name = self.target_point.action_params
                     if macro_name is not None:

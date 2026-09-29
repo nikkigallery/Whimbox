@@ -1,4 +1,5 @@
 from whimbox.config.config import global_config
+from whimbox.common.game_keybinds import GAME_KEYBIND_ATTRIBUTES
 
 class KeybindRef:
     def __init__(self, keybind_obj, attr_name: str):
@@ -73,5 +74,11 @@ class Keybind:
 
     def ref(self, attr_name: str):
         return KeybindRef(self, attr_name)
+
+    def resolve_game_key(self, game_key: str) -> str:
+        attr_name = GAME_KEYBIND_ATTRIBUTES.get(str(game_key or "").strip())
+        if attr_name is None:
+            raise ValueError(f"不支持的游戏按键: {game_key}")
+        return getattr(self, attr_name)
 
 keybind = Keybind()

@@ -24,7 +24,7 @@ class RunMacroTask(TaskTemplate):
         self.macro_record = scripts_manager.query_macro(macro_filename, return_one=True)
         if not self.macro_record:
             raise ValueError(f"宏\"{macro_filename}\"不存在，请先下载该宏")
-        if self.macro_record.info.version not in ("3.0", "3.1"):
+        if self.macro_record.info.version not in ("3.0", "3.1", "3.2"):
             raise ValueError(f"宏版本不匹配，请更新宏（当前版本：{self.macro_record.info.version}）")
         self.is_play_music = False
         if self.macro_record.info.type == "乐谱":
@@ -138,6 +138,15 @@ class RunMacroTask(TaskTemplate):
                 elif step.action == "release":
                     itt.key_up(step.key)
                     self.pressing_keys.discard(step.key)
+
+            elif step.type == "game_key":
+                resolved_key = keybind.resolve_game_key(step.key)
+                if step.action == "press":
+                    itt.key_down(resolved_key)
+                    self.pressing_keys.add(resolved_key)
+                elif step.action == "release":
+                    itt.key_up(resolved_key)
+                    self.pressing_keys.discard(resolved_key)
                     
             elif step.type == "mouse":
                 # 鼠标按键操作

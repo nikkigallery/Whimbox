@@ -4,6 +4,7 @@ import os
 import json
 import threading
 
+from whimbox.common.game_keybinds import GAME_KEYBIND_IDS
 from whimbox.common.path_lib import SCRIPT_PATH
 from whimbox.common.logger import logger
 
@@ -49,10 +50,19 @@ class PathRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_loop_segments(self):
+        game_key_points = [
+            point for point in self.points if point.action == "GAME_KEY_CLICK"
+        ]
+        if game_key_points and self.info.version != "2.2":
+            raise ValueError("包含游戏按键的路线版本必须为2.2")
+        for point in game_key_points:
+            if point.action_params not in GAME_KEYBIND_IDS:
+                raise ValueError(f"不支持的游戏按键: {point.action_params}")
+
         if not self.loops:
             return self
-        if self.info.version != "2.1":
-            raise ValueError("包含循环分段的路线版本必须为2.1")
+        if self.info.version not in ("2.1", "2.2"):
+            raise ValueError("包含循环分段的路线版本必须为2.1或2.2")
 
         point_id_to_index = {point.id: index for index, point in enumerate(self.points)}
         if len(point_id_to_index) != len(self.points):
@@ -98,7 +108,7 @@ class MacroInfo(ScriptInfo):
 
 # 宏脚本步骤
 class MacroStep(BaseModel):
-    type: Literal["gap", "keyboard", "mouse", "loop", "wait_game_page", "wait_not_game_page", "goto_game_page"]  # 操作类型
+    type: Literal["gap", "keyboard", "game_key", "mouse", "loop", "wait_game_page", "wait_not_game_page", "goto_game_page"]  # 操作类型
     key: Optional[str] = None  # 键盘按键名称或鼠标按键名称
     action: Optional[Literal["press", "release"]] = None  # 按键动作：按下/松开
     position: Optional[tuple[int, int]] = None  # 鼠标位置（窗口内坐标，归一化到 width=1920）
@@ -115,8 +125,16 @@ class MacroRecord(BaseModel):
     @model_validator(mode="after")
     def validate_loop_structure(self):
         max_depth, _ = analyze_macro_steps(self.steps)
-        if max_depth > 1 and self.info.version != "3.1":
-            raise ValueError("包含嵌套循环的宏版本必须为3.1")
+        game_key_steps = [step for step in self.steps if step.type == "game_key"]
+        if game_key_steps and self.info.version != "3.2":
+            raise ValueError("包含游戏按键的宏版本必须为3.2")
+        for step in game_key_steps:
+            if step.key not in GAME_KEYBIND_IDS:
+                raise ValueError(f"不支持的游戏按键: {step.key}")
+            if step.action not in ("press", "release"):
+                raise ValueError("游戏按键动作必须为press或release")
+        if max_depth > 1 and self.info.version not in ("3.1", "3.2"):
+            raise ValueError("包含嵌套循环的宏版本必须为3.1或3.2")
         return self
 
 
