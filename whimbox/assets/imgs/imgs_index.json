@@ -482,6 +482,12 @@
   "IconAbilityWing": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\IconAbilityWing.png"
   },
+  "IconBigMapFirstScale2": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapFirstScale2.png"
+  },
+  "IconBigMapFirstScale2JoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapFirstScale2JoyStick.png"
+  },
   "IconBigMapHomeFeature": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapHomeFeature.png"
   },
@@ -509,11 +515,23 @@
   "IconBigMapSecondScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScale.png"
   },
+  "IconBigMapSecondScale2": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScale2.png"
+  },
+  "IconBigMapSecondScale2JoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScale2JoyStick.png"
+  },
   "IconBigMapSecondScaleJoyStick": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapSecondScaleJoyStick.png"
   },
   "IconBigMapThirdScale": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScale.png"
+  },
+  "IconBigMapThirdScale2": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScale2.png"
+  },
+  "IconBigMapThirdScale2JoyStick": {
+    "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScale2JoyStick.png"
   },
   "IconBigMapThirdScaleJoyStick": {
     "rel_path": "imgs\\Windows\\BigMap\\IconBigMapThirdScaleJoyStick.png"
