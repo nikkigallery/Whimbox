@@ -203,6 +203,20 @@
             "description": "一条龙后置自定义步骤"
         }
     },
+    "CustomFlow": {
+        "items": {
+            "value": [],
+            "description": "旧版自定义流程步骤"
+        },
+        "flows": {
+            "value": [],
+            "description": "自定义流程方案"
+        },
+        "active_flow_id": {
+            "value": "",
+            "description": "当前选择的自定义流程"
+        }
+    },
     "Keybinds": {
         "map":{
             "value": "m",

@@ -8,6 +8,7 @@ from whimbox.rpc_server import notify_event
 from whimbox.common.scripts_manager import scripts_manager
 from whimbox.task.common_task.start_game_task import StartGameTask
 from whimbox.task.common_task.goto_ui_task import GotoUITask
+from whimbox.task.custom_flow_task import CustomFlowTask
 from whimbox.task.daily_task import (
     JihuaTask,
     BlessTask,
@@ -285,6 +286,11 @@ def run_all_in_one(session_id: str, input: Dict[str, Any], context: Dict[str, An
     return TaskAdapter.run(AllInOneTask, session_id, input, context)
 
 
+@_with_game_check
+def run_custom_flow(session_id: str, input: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    return TaskAdapter.run(CustomFlowTask, session_id, input, context)
+
+
 def run_start_game(session_id: str, input: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     return TaskAdapter.run(StartGameTask, session_id, input, context)
 
@@ -334,6 +340,7 @@ TOOL_FUNCS = {
     "nikki.open_path_folder": run_open_path_folder,
     "nikki.daily_photo": run_daily_photo,
     "nikki.all_in_one": run_all_in_one,
+    "nikki.custom_flow": run_custom_flow,
     "nikki.start_game": run_start_game,
     "nikki.goto_ui": run_goto_ui,
     "nikki.monthly_pass": run_monthly_pass,

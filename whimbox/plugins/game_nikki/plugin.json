@@ -172,6 +172,13 @@
       "output_schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" }, "data": {} } }
     },
     {
+      "id": "nikki.custom_flow",
+      "name": "自定义流程",
+      "description": "按用户配置的顺序执行跑图脚本和宏脚本",
+      "input_schema": { "type": "object", "properties": { "flow_id": { "type": "string", "description": "要执行的流程方案 ID；不传则执行当前选择的方案" } }, "required": [] },
+      "output_schema": { "type": "object", "properties": { "status": { "type": "string" }, "message": { "type": "string" }, "data": {} } }
+    },
+    {
       "id": "nikki.start_game",
       "name": "打开游戏",
       "description": "自动帮用户打开游戏",

@@ -4,6 +4,7 @@ import json
 import os
 from typing import Any, Dict
 
+from whimbox.common.custom_flow import get_custom_flow_state, save_custom_flow_state
 from whimbox.common.path_lib import ASSETS_PATH
 from whimbox.common.scripts_manager import scripts_manager
 from whimbox.config.config import global_config
@@ -147,6 +148,16 @@ def handle_config_method(method: str, params: Dict[str, Any]) -> Any:
             "post_custom_steps": post_custom_steps,
             "custom_steps": post_custom_steps,
         }
+
+    if method == "custom_flow.get":
+        return get_custom_flow_state()
+
+    if method == "custom_flow.update":
+        state = save_custom_flow_state(
+            params.get("flows"),
+            params.get("active_flow_id"),
+        )
+        return {"ok": True, **state}
 
     return UNHANDLED
 
