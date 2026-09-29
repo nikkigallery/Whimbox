@@ -86,7 +86,7 @@
         },
         "auto_close_game": {
             "value": [],
-            "description": "一条龙结束后（可多选）"
+            "description": "一条龙结束后，关闭游戏/奇想盒/电脑（可多选）"
         },
         "start_magnet": {
             "value": "false",
