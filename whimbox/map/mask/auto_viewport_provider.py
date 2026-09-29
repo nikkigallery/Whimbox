@@ -172,6 +172,7 @@ class HybridAutoCenterViewportProvider:
         self._matching_failure_since_monotonic: float | None = None
         self._matching_failure_key: tuple[str, str] | None = None
         self._tracking_zoom_key: tuple[str, str] | None = None
+        self._last_zoom_feature_key: tuple[str, int, str] | None = None
         self._zoom_detection = _ZoomDetection(
             status="unknown",
             level="",
@@ -515,19 +516,51 @@ class HybridAutoCenterViewportProvider:
                     ("second", IconBigMapSecondScaleJoyStick),
                 ),
             )
+
+        def feature_score(icon) -> float:
+            icon_cap = crop(image, icon.cap_posi)
+            return float(
+                itt.get_img_existence(
+                    icon,
+                    ret_mode=IMG_RATE,
+                    cap=icon_cap,
+                )
+            )
+
         best_score = float("-inf")
-        for icons in icon_groups:
+        cached_key = self._last_zoom_feature_key
+        if cached_key is not None and cached_key[0] == map_name:
+            _, group_index, cached_level = cached_key
+            if 0 <= group_index < len(icon_groups):
+                cached_icon = next(
+                    (
+                        icon
+                        for level, icon in icon_groups[group_index]
+                        if level == cached_level
+                    ),
+                    None,
+                )
+                if cached_icon is not None:
+                    cached_score = feature_score(cached_icon)
+                    best_score = cached_score
+                    if cached_score >= float(cached_icon.threshold):
+                        return _ZoomDetection(
+                            status="supported",
+                            level=cached_level,
+                            reference_scale=_zoom_scale_for_level(
+                                map_name,
+                                cached_level,
+                            ),
+                            confidence=cached_score,
+                        )
+
+        for group_index, icons in enumerate(icon_groups):
             best_level = ""
             group_best_score = float("-inf")
             for level, icon in icons:
-                icon_cap = crop(image, icon.cap_posi)
-                score = float(
-                    itt.get_img_existence(
-                        icon,
-                        ret_mode=IMG_RATE,
-                        cap=icon_cap,
-                    )
-                )
+                if cached_key == (map_name, group_index, level):
+                    continue
+                score = feature_score(icon)
                 best_score = max(best_score, score)
                 if (
                     score >= float(icon.threshold)
@@ -537,6 +570,11 @@ class HybridAutoCenterViewportProvider:
                     group_best_score = score
 
             if best_level:
+                self._last_zoom_feature_key = (
+                    map_name,
+                    group_index,
+                    best_level,
+                )
                 reference = _zoom_scale_for_level(
                     map_name,
                     best_level,
@@ -548,6 +586,7 @@ class HybridAutoCenterViewportProvider:
                     confidence=group_best_score,
                 )
 
+        self._last_zoom_feature_key = None
         return _ZoomDetection(
             status="unsupported",
             level="",

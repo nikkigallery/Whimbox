@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 import ctypes
 import threading
 import time
@@ -71,6 +72,7 @@ class MapMaskService:
         self._points_cache_lock = threading.Lock()
         self._candidate_points_cache_key: tuple[Any, ...] | None = None
         self._candidate_points_cache: tuple[MapMaskPoint, ...] = ()
+        self._candidate_point_x_values: tuple[float, ...] = ()
         self._visible_points_cache_key: tuple[Any, ...] | None = None
         self._visible_points_cache: tuple[dict[str, Any], ...] = ()
         self._mouse_wheel_guard = MouseWheelGuard(
@@ -485,6 +487,11 @@ class MapMaskService:
                 label_ids=selected_label_ids,
                 map_name=active_viewport.map_name,
             )
+            points = self._get_points_in_viewport_bounds(
+                key=candidate_cache_key,
+                viewport=active_viewport,
+                fallback_points=points,
+            )
             visible_points = []
             for point in points:
                 if state.display_mode == "minimap":
@@ -797,15 +804,48 @@ class MapMaskService:
                 return self._candidate_points_cache
 
         points = tuple(
-            provider.list_points(
-                label_ids=label_ids,
-                map_name=map_name,
+            sorted(
+                provider.list_points(
+                    label_ids=label_ids,
+                    map_name=map_name,
+                ),
+                key=lambda point: (point.image_x, point.image_y, point.id),
             )
         )
         with self._points_cache_lock:
             self._candidate_points_cache_key = key
             self._candidate_points_cache = points
+            self._candidate_point_x_values = tuple(
+                point.image_x for point in points
+            )
         return points
+
+    def _get_points_in_viewport_bounds(
+        self,
+        *,
+        key: tuple[Any, ...],
+        viewport: MapMaskViewport,
+        fallback_points: tuple[MapMaskPoint, ...],
+    ) -> tuple[MapMaskPoint, ...]:
+        image_right = viewport.image_left + viewport.image_width
+        image_bottom = viewport.image_top + viewport.image_height
+        with self._points_cache_lock:
+            if key != self._candidate_points_cache_key:
+                return fallback_points
+            start = bisect_left(
+                self._candidate_point_x_values,
+                viewport.image_left,
+            )
+            end = bisect_right(
+                self._candidate_point_x_values,
+                image_right,
+            )
+            x_candidates = self._candidate_points_cache[start:end]
+        return tuple(
+            point
+            for point in x_candidates
+            if viewport.image_top <= point.image_y <= image_bottom
+        )
 
     def _get_cached_visible_points(
         self,

@@ -1303,6 +1303,46 @@ class AutomaticViewportTrackingTests(unittest.TestCase):
                         _zoom_scale_for_level("wanxiang", level),
                     )
 
+    def test_stable_zoom_only_rechecks_last_matching_feature(self) -> None:
+        keyboard_icons = {
+            "IconBigMapMaxScale": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScale": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScale": Mock(cap_posi=None, threshold=0.9),
+        }
+        joystick_icons = {
+            "IconBigMapMaxScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapThirdScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+            "IconBigMapSecondScaleJoyStick": Mock(cap_posi=None, threshold=0.9),
+        }
+        target = joystick_icons["IconBigMapThirdScaleJoyStick"]
+        image = np.zeros((1080, 1920, 4), dtype=np.uint8)
+        provider = HybridAutoCenterViewportProvider(Mock())
+
+        with (
+            patch.multiple(
+                "whimbox.ui.ui_assets",
+                **keyboard_icons,
+                **joystick_icons,
+            ),
+            patch(
+                "whimbox.map.mask.auto_viewport_provider.crop",
+                return_value=image,
+            ),
+            patch(
+                "whimbox.interaction.interaction_core.itt.get_img_existence",
+                side_effect=lambda icon, **_kwargs: 0.95 if icon is target else 0.0,
+            ) as get_img_existence,
+        ):
+            first = provider._detect_zoom_level(image, "miraland")
+            first_call_count = get_img_existence.call_count
+            second = provider._detect_zoom_level(image, "miraland")
+            second_call_count = get_img_existence.call_count - first_call_count
+
+        self.assertEqual(first.level, "third")
+        self.assertEqual(second.level, "third")
+        self.assertGreater(first_call_count, 1)
+        self.assertEqual(second_call_count, 1)
+
     def test_hybrid_auto_center_is_the_default_mode(self) -> None:
         with patch.dict(
             os.environ,
@@ -1628,6 +1668,65 @@ class DetectionWorkerLifecycleTests(unittest.TestCase):
 
 
 class VisiblePointsTests(unittest.TestCase):
+    def test_candidate_points_are_prefiltered_by_viewport_x_range(self) -> None:
+        service = MapMaskService()
+        active_viewport = viewport()
+        points = tuple(
+            sorted(
+                (
+                    MapMaskPoint(
+                        id="left",
+                        label_id="test",
+                        name="Left",
+                        map_name="miraland",
+                        image_x=active_viewport.image_left - 1,
+                        image_y=active_viewport.image_top,
+                        provider="test",
+                    ),
+                    MapMaskPoint(
+                        id="inside",
+                        label_id="test",
+                        name="Inside",
+                        map_name="miraland",
+                        image_x=active_viewport.image_left + 1,
+                        image_y=active_viewport.image_top,
+                        provider="test",
+                    ),
+                    MapMaskPoint(
+                        id="right",
+                        label_id="test",
+                        name="Right",
+                        map_name="miraland",
+                        image_x=(
+                            active_viewport.image_left
+                            + active_viewport.image_width
+                            + 1
+                        ),
+                        image_y=active_viewport.image_top,
+                        provider="test",
+                    ),
+                ),
+                key=lambda point: point.image_x,
+            )
+        )
+        key = ("test",)
+        service._candidate_points_cache_key = key
+        service._candidate_points_cache = points
+        service._candidate_point_x_values = tuple(
+            point.image_x for point in points
+        )
+
+        visible_candidates = service._get_points_in_viewport_bounds(
+            key=key,
+            viewport=active_viewport,
+            fallback_points=points,
+        )
+
+        self.assertEqual(
+            [point.id for point in visible_candidates],
+            ["inside"],
+        )
+
     def test_enabled_label_is_visible_and_disabled_label_is_hidden(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             points_path = Path(directory) / "points.local.json"
