@@ -54,7 +54,22 @@ class BlessTask(TaskTemplate):
             self.log_to_gui("未找到注入能量按钮", is_error=True)
             wait_until_appear_then_click(ButtonHuanjingCancel)
             return "step6"
-    
+
+
+    @register_step("判断闪光是否已满")
+    def step_check_full(self):
+        text_box_dict = itt.ocr_and_detect_posi(AreaBlessHuanjingFullWarning)
+        if "祝福闪光数量溢出" in text_box_dict:
+            self.log_to_gui("祝福闪光数量溢出", is_error=True)
+            AreaBlessHuanjingFullWarning.click(target_box=text_box_dict["取消"])
+            self.update_task_result(
+                status=STATE_TYPE_FAILED,
+                message="祝福闪光数量溢出",
+                data={"bless_sparkle_full": True},
+            )
+            wait_until_appear_then_click(ButtonHuanjingCancel)
+            return "step6"
+
 
     @register_step("等待挑战完成")
     def step5(self):

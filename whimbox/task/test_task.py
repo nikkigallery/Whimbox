@@ -29,15 +29,17 @@ if __name__ == "__main__":
     # cap = cv2.resize(cap, (1920, 1080))
     # cap = crop(cap, ButtonItemExpiredConfirm.cap_posi)
     # print(itt.get_img_existence(ButtonItemExpiredConfirm, cap=cap, ret_mode=IMG_RATE, show_res=True))
-    while True:
-        print(itt.get_img_existence(IconDungeonFeature, ret_mode=IMG_RATE, show_res=True))
-        # cv2.imshow("cap", itt.capture(AreaBlessHuanjingDifficulty3.position))
-        # cv2.waitKey(1)
-        time.sleep(0.5)
-    # ui_control.goto_page(page_huanjing_bless)
+    # while True:
+    #     print(itt.get_img_existence(IconDungeonFeature, ret_mode=IMG_RATE, show_res=True))
+    #     # cv2.imshow("cap", itt.capture(AreaBlessHuanjingDifficulty3.position))
+    #     # cv2.waitKey(1)
+    #     time.sleep(0.5)
+    # # ui_control.goto_page(page_huanjing_bless)
     
     # while True:
     #     print(itt.ocr_single_line(AreaBigMapRegionName))
     #     time.sleep(0.2)
+    
+    itt.ocr_and_detect_posi(AreaBlessHuanjingFullWarning, show_res=True)
 
 

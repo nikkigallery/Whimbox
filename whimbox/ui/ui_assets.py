@@ -121,6 +121,7 @@ ButtonBlessHuanjingQuickPlay = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOT
 ButtonBlessHuanjingNumMax = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_CENTER)
 ButtonHuanjingConfirm = Button(print_log=LOG_ALL, threshold=0.99, anchor=ANCHOR_CENTER)
 ButtonHuanjingCancel = Button(print_log=LOG_ALL, threshold=0.99, anchor=ANCHOR_CENTER)
+AreaBlessHuanjingFullWarning = Area(anchor=ANCHOR_CENTER)
 
 # 素材激化幻境相关
 ButtonJihuaInnerGo = Button(print_log=LOG_WHEN_TRUE, anchor=ANCHOR_BOTTOM_RIGHT)

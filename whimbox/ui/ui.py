@@ -176,7 +176,7 @@ class UI():
                         success = False
                         break
 
-                itt.wait_until_stable(threshold=0.98)
+                itt.wait_until_stable(threshold=0.97)
                 # Handle loading screen
                 self.ui_additional()
                 logger.info("page transition completed")

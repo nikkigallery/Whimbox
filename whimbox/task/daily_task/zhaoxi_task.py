@@ -97,6 +97,16 @@ class ZhaoxiTask(TaskTemplate):
         self.current_score = 0
         self.need_cost_energy = 0
         self.done_task_names = []
+        self.bless_sparkle_full = False
+
+    def _record_bless_result(self, task_result):
+        result_data = (
+            task_result.data
+            if isinstance(getattr(task_result, "data", None), dict)
+            else {}
+        )
+        if result_data.get("bless_sparkle_full"):
+            self.bless_sparkle_full = True
 
     @register_step("检查朝夕心愿完成情况")
     def step1(self):
@@ -203,6 +213,8 @@ class ZhaoxiTask(TaskTemplate):
                         continue
                 task_obj = task_dict[task_name]
                 result = task_obj.task_run()
+                if task_name == DAILY_TASK_GET_BLESS:
+                    self._record_bless_result(result)
                 if result.status == STATE_TYPE_SUCCESS:
                     self.current_score += task['score']
                     self.done_task_names.append(task_name)
@@ -225,7 +237,8 @@ class ZhaoxiTask(TaskTemplate):
         elif energy_cost == "祝福闪光幻境":
             if DAILY_TASK_GET_BLESS not in self.done_task_names:
                 task = daily_task.BlessTask(session_id=self.session_id)
-                task.task_run()
+                task_result = task.task_run()
+                self._record_bless_result(task_result)
             else:
                 self.log_to_gui("体力在做日常时以消耗，跳过")
         elif energy_cost == "魔物试炼幻境":
@@ -256,6 +269,16 @@ class ZhaoxiTask(TaskTemplate):
     @register_step("退出朝夕心愿")
     def step6(self):
         ui_control.goto_page(page_main)
+
+    def handle_finally(self):
+        result_data = (
+            dict(self.task_result.data)
+            if isinstance(self.task_result.data, dict)
+            else {}
+        )
+        result_data["bless_sparkle_full"] = self.bless_sparkle_full
+        self.task_result.data = result_data
+        super().handle_finally()
     
 
 if __name__ == "__main__":

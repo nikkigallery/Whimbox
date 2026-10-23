@@ -45,6 +45,7 @@ class AllInOneTask(TaskTemplate):
             key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
         }
         self.has_meteor_today = False
+        self.bless_sparkle_full = False
         self.pre_custom_step_results = []
         self.post_custom_step_results = []
         self.change_account_enabled = global_config.get_bool("OneDragon", "change_account", False)
@@ -159,6 +160,7 @@ class AllInOneTask(TaskTemplate):
             key: STEP_RESULT_SKIPPED for key, _, _ in DEFAULT_STEP_CONFIG
         }
         self.has_meteor_today = False
+        self.bless_sparkle_full = False
         self.pre_custom_step_results = []
         self.post_custom_step_results = []
 
@@ -168,6 +170,7 @@ class AllInOneTask(TaskTemplate):
                 "account_name": self.current_account,
                 "default_steps": dict(self.default_step_states),
                 "has_meteor_today": self.has_meteor_today,
+                "bless_sparkle_full": self.bless_sparkle_full,
                 "pre_custom_steps": [dict(item) for item in self.pre_custom_step_results],
                 "post_custom_steps": [dict(item) for item in self.post_custom_step_results],
             }
@@ -260,6 +263,9 @@ class AllInOneTask(TaskTemplate):
 
         if account_result.get("has_meteor_today"):
             msg_lines.append("❗发现今日有巨陨星❗")
+
+        if account_result.get("bless_sparkle_full"):
+            msg_lines.append("❗祝福闪光已满，请及时清理，避免无法继续获取❗")
 
         pre_custom_steps = account_result.get("pre_custom_steps", [])
         if pre_custom_steps:
@@ -373,6 +379,9 @@ class AllInOneTask(TaskTemplate):
     def step3(self):
         zhaoxi_task = daily_task.ZhaoxiTask(session_id=self.session_id)
         task_result = zhaoxi_task.task_run()
+        result_data = task_result.data if isinstance(task_result.data, dict) else {}
+        if result_data.get("bless_sparkle_full"):
+            self.bless_sparkle_full = True
         self._set_default_step_result("step_zhaoxi", task_result)
 
     @register_step("收集星光结晶")
@@ -489,6 +498,9 @@ class AllInOneTask(TaskTemplate):
         if self.has_meteor_today:
             msg_lines.append("❗发现今日有巨陨星❗")
 
+        if self.bless_sparkle_full:
+            msg_lines.append("❗祝福闪光已满，请及时清理，避免无法继续获取❗")
+
         if self.pre_custom_step_results:
             msg_lines.append("前置步骤：")
             for item in self.pre_custom_step_results:
@@ -504,6 +516,7 @@ class AllInOneTask(TaskTemplate):
             data={
                 "default_steps": dict(self.default_step_states),
                 "has_meteor_today": self.has_meteor_today,
+                "bless_sparkle_full": self.bless_sparkle_full,
                 "pre_custom_steps": list(self.pre_custom_step_results),
                 "post_custom_steps": list(self.post_custom_step_results),
             },
