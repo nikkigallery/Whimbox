@@ -13,7 +13,7 @@ AreaPageTitleFeature = Area(anchor=ANCHOR_TOP_LEFT)
 
 # 主界面、esc菜单
 IconPageMainFeature = ImgIcon(print_log=LOG_NONE, threshold=0.90, gray_limit=(230, 255), anchor=ANCHOR_BOTTOM_LEFT)
-IconDungeonFeature = ImgIcon(print_log=LOG_ALL, threshold=0.90, gray_limit=(230, 255), anchor=ANCHOR_TOP_LEFT)
+IconDungeonFeature = ImgIcon(print_log=LOG_ALL, threshold=0.90, hsv_limit=([80,40,180], [95,105,255]), anchor=ANCHOR_TOP_LEFT)
 ButtonDungeonQuitOK = Button(print_log=LOG_ALL, anchor=ANCHOR_CENTER)
 AreaUITime = Area(anchor=ANCHOR_TOP_LEFT)
 AreaEscEntrances = Area(anchor=ANCHOR_LEFT_CENTER)
