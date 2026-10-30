@@ -50,6 +50,9 @@
   "AreaBlessHuanjingDifficulty3": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\bless\\AreaBlessHuanjingDifficulty3.png"
   },
+  "AreaBlessHuanjingFullWarning": {
+    "rel_path": "imgs\\Windows\\UI\\huanjing\\bless\\AreaBlessHuanjingFullWarning.png"
+  },
   "AreaBlessHuanjingLevelsSelect": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\bless\\AreaBlessHuanjingLevelsSelect.jpg"
   },
@@ -632,11 +635,11 @@
   "IconPageMainFeature": {
     "rel_path": "imgs\\Windows\\UI\\IconPageMainFeature.png"
   },
-  "IconPhotoEdit": {
-    "rel_path": "imgs\\Windows\\UI\\photo\\IconPhotoEdit.png"
-  },
   "IconPhotoFeature": {
     "rel_path": "imgs\\Windows\\UI\\photo\\IconPhotoFeature.png"
+  },
+  "IconPhotoPost": {
+    "rel_path": "imgs\\Windows\\UI\\photo\\IconPhotoPost.png"
   },
   "IconPickupFeature": {
     "rel_path": "imgs\\Windows\\General\\IconPickupFeature.png"
