@@ -179,12 +179,12 @@ TextDeliveryBottle = Text("投递", cap_area = AreaPickup)
 GameImgStarCrystal = GameImg(name="T_UI_map_img_icon_star_02")
 
 # 换装界面
-IconWardrobeFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=ANCHOR_TOP_CENTER)
+IconWardrobeFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.90, hsv_limit=([0, 0, 250], [30, 50, 255]), anchor=ANCHOR_LEFT_CENTER)
 
 # 能力配置界面
-AreaWardrobeTab3 = Area(anchor=ANCHOR_TOP_CENTER)
+# AreaWardrobeTab3 = Area(anchor=ANCHOR_TOP_CENTER)
 # TextWardrobeAbilityTab = Text("能力配置", cap_area = AreaWardrobeTab3)
-IconAbilityFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.99, anchor=ANCHOR_TOP_CENTER)
+IconAbilityFeature = ImgIcon(print_log=LOG_WHEN_TRUE, threshold=0.90, gray_limit=(245, 255), anchor=ANCHOR_TOP_RIGHT)
 ButtonAbilityConfig = ImgIcon(print_log=LOG_ALL, threshold=0.99, anchor=ANCHOR_BOTTOM_RIGHT)
 ButtonAbilityChangeList = Button(print_log=LOG_WHEN_TRUE, threshold=0.75, gray_limit=(250, 255), anchor=ANCHOR_TOP_RIGHT)
 IconAbilityFloat = ImgIcon()    # 泡泡套跳跃

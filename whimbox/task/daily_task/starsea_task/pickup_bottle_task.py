@@ -20,3 +20,8 @@ class PickupBottleTask(TaskTemplate):
             message=f"拾取漂流瓶x{self.material_count_dict["漂流瓶"]}",
             data=self.material_count_dict
         )
+
+
+if __name__ == "__main__":
+    task = PickupBottleTask(session_id="debug")
+    print(task.task_run())

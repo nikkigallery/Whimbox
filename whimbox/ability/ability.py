@@ -275,10 +275,10 @@ ability_manager = AbilityManager()
 
 if __name__ == "__main__":
     # CV_DEBUG_MODE = True
-    # ability_manager.init_need_ability([ABILITY_NAME_FISH, ABILITY_NAME_STAR_COLLECT, ABILITY_NAME_SHAPESHIFTING, ABILITY_NAME_INSECT])
-    # ability_manager.change_ability(ABILITY_NAME_SHAPESHIFTING)
+    ability_manager.init_need_ability([ABILITY_NAME_FISH, ABILITY_NAME_STAR_COLLECT, ABILITY_NAME_SHAPESHIFTING, ABILITY_NAME_INSECT])
+    ability_manager.change_ability(ABILITY_NAME_SHAPESHIFTING)
     # print(ability_manager.get_current_ability())
-    print(ability_manager.check_current_ability(IconAbilityMachineInfuse))
+    # print(ability_manager.check_current_ability(IconAbilityMachineInfuse))
     # ability_manager._check_jump_ability()
     # ability_manager._check_ability_keymap()
     # print(ability_manager.ability_keymap)
