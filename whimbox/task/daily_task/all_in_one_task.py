@@ -373,6 +373,9 @@ class AllInOneTask(TaskTemplate):
     def step2(self):
         weekly_realm_task = daily_task.WeeklyRealmTask(session_id=self.session_id)
         task_result = weekly_realm_task.task_run()
+        result_data = task_result.data if isinstance(task_result.data, dict) else {}
+        if result_data.get("bless_sparkle_full"):
+            self.bless_sparkle_full = True
         self._set_default_step_result("step_weekly_realm", task_result)
 
     @register_step("开始完成朝夕心愿")

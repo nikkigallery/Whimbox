@@ -38,6 +38,7 @@ class WeeklyRealmTask(TaskTemplate):
         super().__init__(session_id=session_id, name="weekly_realm_task")
         realm_target = global_config.get("OneDragon", "realm_target")
         self.realm_target = _normalize_realm_targets(realm_target)
+        self.bless_sparkle_full = False
 
     @register_step("检查周本完成情况")
     def step1(self):
@@ -76,6 +77,34 @@ class WeeklyRealmTask(TaskTemplate):
                 self.log_to_gui("未找到注入能量按钮", is_error=True)
                 wait_until_appear_then_click(ButtonHuanjingCancel)
                 return False
+            else:
+                itt.delay(0.5)
+                itt.wait_until_stable()
+                self.log_to_gui("判断闪光是否已满")
+                text_box_dict = itt.ocr_and_detect_posi(AreaBlessHuanjingFullWarning)
+                logger.info(f"祝福闪光溢出OCR结果: {text_box_dict}")
+                if "祝福闪光数量溢出" in text_box_dict:
+                    self.bless_sparkle_full = True
+                    self.log_to_gui("祝福闪光数量溢出", is_error=True)
+                    self.update_task_result(
+                        status=STATE_TYPE_FAILED,
+                        message="祝福闪光数量溢出",
+                        data={"bless_sparkle_full": True},
+                    )
+                    cancel_box = text_box_dict.get("取消")
+                    if cancel_box is not None:
+                        try:
+                            AreaBlessHuanjingFullWarning.click(target_box=cancel_box)
+                        except Exception as exc:
+                            logger.warning(f"关闭祝福闪光溢出提示失败: {exc}")
+                    else:
+                        self.log_to_gui("未识别到溢出提示的取消按钮", is_error=True)
+                    try:
+                        wait_until_appear_then_click(ButtonHuanjingCancel)
+                    except Exception as exc:
+                        logger.warning(f"退出周本快速挑战失败: {exc}")
+                    return False
+
         if skip_get_award():
             self.log_to_gui(f"{level_name}完成")
             return True
@@ -87,7 +116,13 @@ class WeeklyRealmTask(TaskTemplate):
         for realm_name in self.realm_target:
             if self.need_stop():
                 break
-            self.quick_challenge(realm_name)
+            if not self.quick_challenge(realm_name):
+                if not self.bless_sparkle_full:
+                    self.update_task_result(
+                        status=STATE_TYPE_FAILED,
+                        message=f"{realm_name}快速挑战失败",
+                    )
+                return STEP_NAME_FINISH
 
     @register_step("完成每周幻境")
     def step4(self):

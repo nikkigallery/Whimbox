@@ -112,6 +112,18 @@ class AllInOneTaskBlessSparkleTest(unittest.TestCase):
 
         self.assertTrue(task.bless_sparkle_full)
 
+    @patch("whimbox.task.daily_task.all_in_one_task.daily_task.WeeklyRealmTask")
+    def test_weekly_realm_full_state_is_recorded(self, weekly_realm_task):
+        weekly_realm_task.return_value.task_run.return_value = SimpleNamespace(
+            status=STATE_TYPE_FAILED,
+            data={"bless_sparkle_full": True},
+        )
+        task = self._make_task()
+
+        task.step2()
+
+        self.assertTrue(task.bless_sparkle_full)
+
     def test_single_account_summary_contains_full_warning(self):
         task = self._make_task()
         task.bless_sparkle_full = True
@@ -120,7 +132,7 @@ class AllInOneTaskBlessSparkleTest(unittest.TestCase):
 
         call = task.update_task_result.call_args
         self.assertIn(
-            "❗祝福闪光已满，请及时使用，避免无法继续获取❗",
+            "❗祝福闪光已满，请及时清理，避免无法继续获取❗",
             call.kwargs["message"],
         )
         self.assertTrue(call.kwargs["data"]["bless_sparkle_full"])
@@ -137,7 +149,7 @@ class AllInOneTaskBlessSparkleTest(unittest.TestCase):
         )
 
         self.assertIn(
-            "❗祝福闪光已满，请及时使用，避免无法继续获取❗",
+            "❗祝福闪光已满，请及时清理，避免无法继续获取❗",
             lines,
         )
 

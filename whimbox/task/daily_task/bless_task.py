@@ -58,7 +58,10 @@ class BlessTask(TaskTemplate):
 
     @register_step("判断闪光是否已满")
     def step_check_full(self):
+        itt.delay(0.5)
+        itt.wait_until_stable()
         text_box_dict = itt.ocr_and_detect_posi(AreaBlessHuanjingFullWarning)
+        logger.info(f"祝福闪光溢出OCR结果: {text_box_dict}")
         if "祝福闪光数量溢出" in text_box_dict:
             self.log_to_gui("祝福闪光数量溢出", is_error=True)
             AreaBlessHuanjingFullWarning.click(target_box=text_box_dict["取消"])
