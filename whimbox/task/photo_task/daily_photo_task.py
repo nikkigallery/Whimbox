@@ -18,7 +18,7 @@ class DailyPhotoTask(TaskTemplate):
 
     @register_step("删除任务照片")
     def step3(self):
-        if wait_until_appear(IconPhotoEdit, retry_time=10):
+        if wait_until_appear(IconPhotoPost, retry_time=10):
             self.update_task_result(message="每日任务拍照完成")
             ButtonPhotoDelete.click()
             if wait_until_appear_then_click(ButtonPhotoDeleteConfirm):
