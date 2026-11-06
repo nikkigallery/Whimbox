@@ -31,6 +31,10 @@ class WindowManager(ABC):
     def is_foreground(self, native_handle: Any, pid: Optional[int]) -> bool:
         """Return True if the process owns the foreground window."""
 
+    def has_foreground_process(self, process_name: str) -> bool:
+        """Whether the foreground window belongs to a process with this name."""
+        return False
+
     @abstractmethod
     def is_minimized(self, native_handle: Any) -> bool:
         """Return True if the window is minimized/iconic."""

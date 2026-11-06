@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Dict
 
 from whimbox.common.custom_flow import get_custom_flow_state, save_custom_flow_state
@@ -18,6 +19,7 @@ UNHANDLED = object()
 
 _setting_options_cache: Dict[str, Any] | None = None
 _material_options_cache: list[str] | None = None
+_last_map_mask_window_refresh = 0.0
 
 
 def handle_script_method(method: str, params: Dict[str, Any]) -> Any:
@@ -191,10 +193,15 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         return UNHANDLED
 
     if method == "map_mask.get_game_window_state":
+        global _last_map_mask_window_refresh
         from whimbox.common.handle_lib import HANDLE_OBJ
 
-        if not HANDLE_OBJ.is_alive():
+        now = time.monotonic()
+        if HANDLE_OBJ.is_alive():
+            HANDLE_OBJ.refresh_if_foreground_changed()
+        elif now - _last_map_mask_window_refresh >= 0.25:
             HANDLE_OBJ.refresh_handle()
+            _last_map_mask_window_refresh = now
 
         found = bool(HANDLE_OBJ.is_alive())
         physical_x, physical_y, physical_width, physical_height = (

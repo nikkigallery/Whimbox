@@ -16,7 +16,7 @@ class ProcessHandler:
     """Manages a reference to a running game process.
 
     The *_native_handle* attribute is an opaque platform object:
-    - Windows: an HWND integer (may be 0 for "not found")
+    - Windows: an HWND integer (None when no valid window is found)
     - macOS: an NSRunningApplication instance (or None)
     """
 
@@ -25,6 +25,7 @@ class ProcessHandler:
         self.process_name = process_name
         self.pid = pid
         self._native_handle: Any = None
+        self._last_foreground_probe_at = 0.0
 
         if self.process_name is not None or self.pid is not None:
             self.refresh_handle()
@@ -37,22 +38,29 @@ class ProcessHandler:
         """Return the native handle (HWND on Windows, NSRunningApplication on macOS)."""
         return self._native_handle
 
+    def refresh_if_foreground_changed(self) -> None:
+        """Rebind to another game instance only when it owns the foreground."""
+        now = time.monotonic()
+        if not self.process_name or now - self._last_foreground_probe_at < 1.0:
+            return
+        self._last_foreground_probe_at = now
+        if not self._mgr.is_foreground(self._native_handle, self.pid):
+            if self._mgr.has_foreground_process(self.process_name):
+                self.refresh_handle()
+
     def refresh_handle(self) -> None:
         """Re-locate the process and update the native handle and PID."""
         native_handle = self._mgr.find_process(self.process_name, self.pid)
 
-        if not self._mgr.is_alive(native_handle) and self.process_name is not None and self.pid is not None:
-            native_handle = self._mgr.find_process(self.process_name, None)
-
-        new_pid = self._mgr.get_pid(native_handle, self.process_name)
-        if new_pid:
-            self.pid = new_pid
-            if not self._mgr.is_alive(native_handle):
-                native_handle = self._mgr.find_process(self.process_name, new_pid)
-        elif self.process_name is not None and not self._mgr.is_alive(native_handle):
-            self.pid = None
-
-        self._native_handle = native_handle
+        if self._mgr.is_alive(native_handle):
+            self.pid = self._mgr.get_pid(native_handle, None)
+            self._native_handle = native_handle
+        else:
+            # Never retain a PID found only by name: it may be a windowless
+            # leftover process, and later close/input operations must not use it.
+            if self.process_name is not None:
+                self.pid = None
+            self._native_handle = None
 
     # ------------------------------------------------------------------
     # Window state queries
@@ -79,9 +87,9 @@ class ProcessHandler:
     # ------------------------------------------------------------------
 
     def _get_process_pid(self) -> Optional[int]:
-        if self.pid is not None:
-            return self.pid
-        pid = self._mgr.get_pid(self._native_handle, self.process_name)
+        if not self.is_alive():
+            return None
+        pid = self._mgr.get_pid(self._native_handle, None)
         if pid:
             self.pid = pid
         return pid

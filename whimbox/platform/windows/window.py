@@ -18,27 +18,120 @@ from whimbox.common.logger import logger
 class WindowsWindowManager(WindowManager):
     """Implements WindowManager using win32 APIs."""
 
+    def __init__(self) -> None:
+        self._last_selection_log: tuple | None = None
+        self._last_selection_log_at = 0.0
+
     def find_process(self, process_name: Optional[str], pid: Optional[int]) -> Optional[int]:
         """Return an HWND for the given process, or None."""
-        if pid is not None:
+        if process_name is None and pid is not None:
             return self._get_hwnd_for_pid(pid)
         if process_name is not None:
+            matching_pids: list[int] = []
             for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] == process_name:
-                    return self._get_hwnd_for_pid(proc.info['pid'])
+                try:
+                    if proc.info['name'] == process_name:
+                        matching_pids.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            if not matching_pids:
+                return None
+
+            windows = {
+                candidate_pid: hwnd
+                for candidate_pid in matching_pids
+                if (hwnd := self._get_hwnd_for_pid(candidate_pid)) is not None
+            }
+            foreground_pid = None
+            try:
+                foreground_hwnd = win32gui.GetForegroundWindow()
+                if foreground_hwnd:
+                    _, foreground_pid = win32process.GetWindowThreadProcessId(foreground_hwnd)
+            except Exception:
+                pass
+
+            if foreground_pid in windows:
+                selected = windows[foreground_pid]
+                reason = 'foreground'
+            elif pid in windows:
+                selected = windows[pid]
+                reason = 'previous-pid'
+            elif len(windows) == 1:
+                selected = next(iter(windows.values()))
+                reason = 'only-valid-window'
+            else:
+                selected = None
+                reason = 'no-valid-window' if not windows else 'ambiguous-windows'
+
+            self._log_window_selection(process_name, matching_pids, windows, selected, reason)
+            return selected
         return None
 
-    def _get_hwnd_for_pid(self, pid: int) -> int:
+    def _get_hwnd_for_pid(self, pid: int) -> Optional[int]:
         hwnds: list[int] = []
 
         def callback(hwnd: int, _: Any) -> bool:
-            _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
-            if found_pid == pid and win32gui.IsWindowVisible(hwnd) and win32gui.GetParent(hwnd) == 0:
-                hwnds.append(hwnd)
+            try:
+                _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
+                if found_pid == pid and win32gui.IsWindowVisible(hwnd) and win32gui.GetParent(hwnd) == 0:
+                    left, top, right, bottom = win32gui.GetClientRect(hwnd)
+                    if right > left and bottom > top:
+                        hwnds.append(hwnd)
+            except Exception:
+                pass
             return True
 
         win32gui.EnumWindows(callback, None)
-        return hwnds[0] if hwnds else 0
+        if not hwnds:
+            return None
+        return max(hwnds, key=lambda hwnd: self._client_area(hwnd))
+
+    @staticmethod
+    def _client_area(hwnd: int) -> int:
+        try:
+            left, top, right, bottom = win32gui.GetClientRect(hwnd)
+            return max(0, right - left) * max(0, bottom - top)
+        except Exception:
+            return 0
+
+    def _log_window_selection(
+        self,
+        process_name: str,
+        matching_pids: list[int],
+        windows: dict[int, int],
+        selected: Optional[int],
+        reason: str,
+    ) -> None:
+        if len(matching_pids) == 1 and selected is not None:
+            return
+        signature = (process_name, tuple(sorted((candidate_pid, windows.get(candidate_pid)) for candidate_pid in matching_pids)), selected, reason)
+        now = time.monotonic()
+        if signature == self._last_selection_log and now - self._last_selection_log_at < 60:
+            return
+        self._last_selection_log = signature
+        self._last_selection_log_at = now
+        candidates = ', '.join(
+            f'pid={candidate_pid} {self._describe_window(windows.get(candidate_pid))}'
+            for candidate_pid in matching_pids
+        )
+        message = f'进程窗口选择: {process_name}, reason={reason}, selected={selected or 0}, candidates=[{candidates}]'
+        if selected is None:
+            logger.warning(message)
+        else:
+            logger.info(message)
+
+    @staticmethod
+    def _describe_window(hwnd: Optional[int]) -> str:
+        if not hwnd:
+            return 'hwnd=0'
+        try:
+            left, top, right, bottom = win32gui.GetClientRect(hwnd)
+            return (
+                f'hwnd={hwnd} class={win32gui.GetClassName(hwnd)} '
+                f'client={right - left}x{bottom - top} minimized={bool(win32gui.IsIconic(hwnd))}'
+            )
+        except Exception:
+            return f'hwnd={hwnd}'
 
     def get_pid(self, native_handle: Any, process_name: Optional[str]) -> Optional[int]:
         hwnd: int = native_handle or 0
@@ -49,14 +142,20 @@ class WindowsWindowManager(WindowManager):
                     return pid
             except Exception as exc:
                 logger.warning(f'通过窗口句柄获取进程ID失败: {exc}')
-        if process_name:
-            for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] == process_name:
-                    return proc.info['pid']
         return None
 
     def is_foreground(self, native_handle: Any, pid: Optional[int]) -> bool:
         return bool(native_handle) and win32gui.GetForegroundWindow() == native_handle
+
+    def has_foreground_process(self, process_name: str) -> bool:
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            if not hwnd:
+                return False
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            return psutil.Process(pid).name() == process_name
+        except Exception:
+            return False
 
     def is_minimized(self, native_handle: Any) -> bool:
         return bool(native_handle) and win32gui.IsIconic(native_handle)

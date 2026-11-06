@@ -97,6 +97,10 @@ class PrintWindowCapture(Capture):
         super().__init__(hwnd_handler)
         self.max_fps = 30
         self._cap_mgr = get_capture_manager()
+        self._last_capture_probe_at = 0.0
+        self._capture_problem_since = None
+        self._last_capture_warning_at = float('-inf')
+        self._last_probe_hwnd = None
 
     def _check_shape(self, img: np.ndarray):
         if img is None:
@@ -110,10 +114,28 @@ class PrintWindowCapture(Capture):
             return False
 
     def _get_capture(self):
-        return self._cap_mgr.capture_window(
-            self.hwnd_handler.get_handle(),
-            self.hwnd_handler.pid,
-        )
+        self.hwnd_handler.refresh_if_foreground_changed()
+        hwnd = self.hwnd_handler.get_handle()
+        frame = self._cap_mgr.capture_window(hwnd, self.hwnd_handler.pid)
+        now = time.monotonic()
+        if hwnd != self._last_probe_hwnd:
+            self._last_probe_hwnd = hwnd
+            self._capture_problem_since = None
+        if hwnd and now - self._last_capture_probe_at >= 1.0:
+            self._last_capture_probe_at = now
+            frame_is_empty = frame is None or not np.any(frame[..., :3])
+            if frame_is_empty:
+                if self._capture_problem_since is None:
+                    self._capture_problem_since = now
+                elif now - self._capture_problem_since >= 5 and now - self._last_capture_warning_at >= 60:
+                    self._last_capture_warning_at = now
+                    logger.warning(
+                        f'游戏截图持续失败或全黑: hwnd={hwnd}, pid={self.hwnd_handler.pid}; '
+                        '可能是游戏加载中或窗口抓取异常'
+                    )
+            else:
+                self._capture_problem_since = None
+        return frame
 
 
 if __name__ == '__main__':
