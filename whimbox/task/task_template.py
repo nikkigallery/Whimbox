@@ -154,6 +154,15 @@ class TaskTemplate:
             pass
         return "/"
 
+    def _get_pause_hotkey(self) -> str:
+        try:
+            key = global_config.get("Whimbox", "pause_key")
+            if isinstance(key, str) and key.strip():
+                return key.strip()
+        except Exception:
+            pass
+        return "]"
+
 
     def __auto_register_steps(self):
         """自动注册带有_register_step标记的方法"""
@@ -196,9 +205,11 @@ class TaskTemplate:
                 set_foreground_task_running(True)
                 _disable_active_map_mask()
                 if self.show_stop_key_message:
-                    self.log_to_gui("你可以按 " + self._get_stop_hotkey() + " 键，随时停止任务")
-                    if self._get_stop_hotkey() != ">":
-                        self.log_to_gui("按 > 可暂停任务，再按一次继续")
+                    stop_key = self._get_stop_hotkey()
+                    pause_key = self._get_pause_hotkey()
+                    self.log_to_gui(f"你可以按 {stop_key} 键，随时停止任务")
+                    if stop_key != pause_key:
+                        self.log_to_gui(f"按 {pause_key} 可暂停任务，再按一次继续")
             
             res = self._task_run()
             if res.status in [STATE_TYPE_SUCCESS, STATE_TYPE_STOP, STATE_TYPE_FAILED]:

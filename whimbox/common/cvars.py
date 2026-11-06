@@ -2,6 +2,7 @@
 
 import threading
 import contextvars
+from contextlib import contextmanager
 from whimbox.common.path_lib import IS_DEV_MODE
 from whimbox.config.config import global_config
 
@@ -63,6 +64,24 @@ _task_pause_lock = threading.Lock()
 _task_can_run = threading.Event()
 _task_can_run.set()
 _task_resume_generation = 0
+_restart_on_resume_generation: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    'restart_on_resume_generation', default=None
+)
+
+
+class TaskResumedDuringRestartableOperation(Exception):
+    """A paused operation must restart instead of continuing from its old UI state."""
+
+
+@contextmanager
+def restart_operation_on_task_resume():
+    """Interrupt only the current task operation after a pause/resume cycle."""
+    token = _restart_on_resume_generation.set(task_resume_generation())
+    try:
+        yield
+        wait_for_task_resume()
+    finally:
+        _restart_on_resume_generation.reset(token)
 
 
 def reset_task_pause() -> None:
@@ -97,7 +116,12 @@ def wait_for_task_resume() -> bool:
     while not _task_can_run.wait(0.1):
         if stop_flag is not None and stop_flag.is_set():
             return False
-    return stop_flag is None or not stop_flag.is_set()
+    if stop_flag is not None and stop_flag.is_set():
+        return False
+    expected_generation = _restart_on_resume_generation.get()
+    if expected_generation is not None and task_resume_generation() != expected_generation:
+        raise TaskResumedDuringRestartableOperation()
+    return True
 
 def set_foreground_task_running(running: bool):
     """设置前台任务运行状态"""

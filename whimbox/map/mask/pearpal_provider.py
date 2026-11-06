@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+from urllib.parse import urlsplit
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -55,6 +56,7 @@ _READ_CATALOG_IDS = frozenset({"20"})
 _USER_REFRESH_PERIOD_SECONDS = 15.0
 _USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
 _USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
+_DETAIL_CACHE_SECONDS = 600.0
 
 
 _STAR_LABEL = MapMaskLabel(
@@ -126,6 +128,7 @@ class OfficialPearPalProvider:
         self._load_error = ""
         self._points: tuple[MapMaskPoint, ...] = ()
         self._point_by_id: dict[str, MapMaskPoint] = {}
+        self._detail_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._source_ids_by_label: dict[str, frozenset[str]] = {}
         self._matched_awarded_counts = (0, 0, 0, 0)
         self._credentials: PearPalCredentials | None = None
@@ -188,15 +191,37 @@ class OfficialPearPalProvider:
         self._ensure_load_started()
         with self._lock:
             point = self._point_by_id.get(str(point_id))
-            authenticated = self._credentials is not None
+            credentials = self._credentials
+            authenticated = credentials is not None
             awarded_state = self._awarded_state
+            user_client = self._user_client
+            data_generation = self._data_generation
         if point is None:
             raise ValueError(f"map mask point not found: {point_id}")
-        return self._decorate_point(
+        result = self._decorate_point(
             point,
             authenticated=authenticated,
             awarded_state=awarded_state,
         ).to_dict()
+        parent_id = str(point.detail.get("parent_id") or "")
+        source_id = (
+            parent_id if parent_id.isdecimal()
+            else str(point.detail.get("source_id") or "")
+        )
+        if not source_id or not hasattr(user_client, "fetch_spawner_detail"):
+            return result
+        with self._lock:
+            cached = self._detail_cache.get(source_id)
+            detail = cached[1] if cached and time.monotonic() - cached[0] < _DETAIL_CACHE_SECONDS else None
+        if detail is None:
+            payload = user_client.fetch_spawner_detail(source_id, credentials)
+            detail = _parse_spawner_detail(payload, self._language)
+            with self._lock:
+                if self._data_generation != data_generation:
+                    raise ValueError("PearPal region changed while loading point detail")
+                self._detail_cache[source_id] = (time.monotonic(), detail)
+        result["detail"].update(detail)
+        return result
 
     def get_data_status(self) -> dict[str, Any]:
         with self._lock:
@@ -265,6 +290,7 @@ class OfficialPearPalProvider:
             self._load_error = ""
             self._points = ()
             self._point_by_id = {}
+            self._detail_cache.clear()
             self._source_ids_by_label = {}
             self._reset_user_state_locked()
         return self.get_user_status()
@@ -771,3 +797,39 @@ def _finite_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _parse_spawner_detail(payload: dict[str, Any], language: str) -> dict[str, Any]:
+    post = payload.get("creator_post")
+    if not isinstance(post, dict):
+        post = {}
+    images: list[str] = []
+    raw_images = post.get("images")
+    for item in raw_images if isinstance(raw_images, list) else []:
+        if len(images) >= 12:
+            break
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("origin") or "")
+        if len(url) > 2048:
+            continue
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            continue
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme == "https" and (
+            host.endswith(".papegames.com")
+            or host.endswith(".infoldgames.com")
+        ):
+            images.append(url)
+    difficulty = post.get("difficulty")
+    return {
+        "location_description": localized_text(payload.get("description"), language),
+        "content": str(post.get("content") or "")[:8000],
+        "images": images,
+        "difficulty": difficulty if isinstance(difficulty, int) and not isinstance(difficulty, bool) else None,
+        "contributor": str(post.get("role_name") or "")[:80],
+        "updated_at": str(payload.get("updated_at") or ""),
+        "submitted_at": str(post.get("submitted_at") or ""),
+    }

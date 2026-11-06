@@ -9,6 +9,7 @@ from typing import Any
 from .pearpal_regions import get_pearpal_region
 
 _MAX_USER_INFO_BYTES = 4 * 1024 * 1024
+_MAX_SPAWNER_INFO_BYTES = 2 * 1024 * 1024
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{8,512}$")
 _OPENID_PATTERN = re.compile(r"^\d{1,32}$")
 
@@ -42,6 +43,7 @@ class PearPalUserClient:
         region_config = get_pearpal_region(region)
         self.region = region_config.name
         self.user_info_url = region_config.user_info_url
+        self.spawner_info_url = f"{region_config.api_base}/v1/strategy/map/spawner/info"
         self.client_id = int(client_id or region_config.client_id)
 
     def fetch_awarded_state(
@@ -87,6 +89,57 @@ class PearPalUserClient:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise PearPalAuthError("user info response is not valid JSON") from exc
         return decode_user_info(payload)
+
+    def fetch_spawner_detail(
+        self,
+        spawner_id: str,
+        credentials: PearPalCredentials | None = None,
+    ) -> dict[str, Any]:
+        if not re.fullmatch(r"\d{1,32}", str(spawner_id)):
+            raise ValueError("invalid PearPal spawner id")
+        payload: dict[str, Any] = {
+            "client_id": self.client_id,
+            "id": int(spawner_id),
+        }
+        if credentials is not None:
+            payload.update(token=credentials.token, openid=credentials.openid)
+        request = urllib.request.Request(
+            self.spawner_info_url,
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "Whimbox-PearPal-Point-Detail/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                if response.geturl() != self.spawner_info_url:
+                    raise PearPalAuthError("point detail request was redirected")
+                content_length = response.headers.get("Content-Length")
+                if content_length and int(content_length) > _MAX_SPAWNER_INFO_BYTES:
+                    raise PearPalAuthError("point detail response is too large")
+                raw = response.read(_MAX_SPAWNER_INFO_BYTES + 1)
+        except PearPalAuthError:
+            raise
+        except Exception as exc:
+            raise PearPalAuthError(
+                f"failed to fetch PearPal point detail: {type(exc).__name__}: {exc}"
+            ) from exc
+        if len(raw) > _MAX_SPAWNER_INFO_BYTES:
+            raise PearPalAuthError("point detail response is too large")
+        try:
+            result = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PearPalAuthError("point detail response is not valid JSON") from exc
+        if not isinstance(result, dict) or result.get("code") != 0:
+            message = result.get("info") if isinstance(result, dict) else "invalid response"
+            raise PearPalAuthError(f"PearPal point detail request failed: {message}")
+        data = result.get("data")
+        if not isinstance(data, dict):
+            raise PearPalAuthError("point detail response is missing data")
+        return data
 
 
 def decode_user_info(payload: Any) -> PearPalAwardedState:

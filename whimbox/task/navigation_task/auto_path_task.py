@@ -16,7 +16,11 @@ from whimbox.action.fairy_animal import FairyAnimalTask
 from whimbox.action.fishing import FishingTask, FISHING_TYPE_MIRALAND, FISHING_TYPE_HOME
 from whimbox.common.base_threading import BaseThreading
 from whimbox.common.keybind import keybind
-from whimbox.common.cvars import task_resume_generation
+from whimbox.common.cvars import (
+    TaskResumedDuringRestartableOperation,
+    restart_operation_on_task_resume,
+    task_resume_generation,
+)
 from whimbox.common.scripts_manager import *
 from whimbox.map.convert import convert_GameLoc_to_PngMapPx
 from whimbox.ui.ui import ui_control
@@ -90,6 +94,7 @@ class AutoPathTask(TaskTemplate):
         self.current_game_move_mode = MOVE_MODE_WALK
         self.once_loop_time = 0
         self.last_teleport_point_id = 0
+        self._teleport_resume_handled_generation = None
 
         # 各类材料获取任务的结果记录
         self.material_count_dict = {}
@@ -285,6 +290,8 @@ class AutoPathTask(TaskTemplate):
             if current_generation == seen_resume_generation:
                 return False
             seen_resume_generation = current_generation
+            if current_generation == self._teleport_resume_handled_generation:
+                return True
             self._resume_after_pause()
             return True
 
@@ -342,6 +349,29 @@ class AutoPathTask(TaskTemplate):
             self.last_need_move_mode = MOVE_MODE_WALK
             self.current_game_move_mode = MOVE_MODE_WALK
             self.log_to_gui("偏离路线，回到上次经过的路线传送点继续")
+
+    def _teleport_with_pause_recovery(self, position):
+        needs_return_to_main = False
+        while not self.need_stop():
+            try:
+                with restart_operation_on_task_resume():
+                    if needs_return_to_main and not back_to_page_main(timeout=30, max_esc=12):
+                        if self.stop_flag.is_set():
+                            return False
+                        raise RuntimeError("暂停后未能返回主界面，无法重新传送")
+                    nikki_map.bigmap_tp(position, self.path_info.map)
+                return not self.stop_flag.is_set()
+            except TaskResumedDuringRestartableOperation:
+                self._teleport_resume_handled_generation = task_resume_generation()
+                needs_return_to_main = True
+                self.log_to_gui("传送期间暂停，返回主界面后重新传送")
+                self.stop_move()
+                if self.jump_controller:
+                    self.jump_controller.clear_jump_state()
+                self.last_position = None
+                self.once_loop_time = 0
+                self.clear_stuck()
+        return False
 
 
     def check_stuck(self):
@@ -629,7 +659,8 @@ class AutoPathTask(TaskTemplate):
                 self.log_to_gui(f"传送到附近的流转之柱")
                 self.stop_move()
                 self.change_to_walk()
-                nikki_map.bigmap_tp(self.target_point.position, self.path_info.map)
+                if not self._teleport_with_pause_recovery(self.target_point.position):
+                    return False
                 self.curr_position = nikki_map.get_position()
                 self.clear_stuck()
             else:
@@ -692,7 +723,16 @@ class AutoPathTask(TaskTemplate):
             self.click_skip_monitor = None
 
         self.stop_move()
-        self.change_to_walk()
+        if not self.stop_flag.is_set():
+            try:
+                self.change_to_walk()
+            except Exception:
+                # 停止请求可能恰好发生在截图期间，此时截图会返回 None。
+                if not self.stop_flag.is_set():
+                    raise
+        if self.stop_flag.is_set():
+            # 停止后普通按键接口会跳过操作，直接释放自动化持有的按键。
+            itt.release_held_inputs()
         if self.jump_controller is not None and self.move_controller is not None:
             self.jump_controller.stop_threading()
             self.move_controller.stop_threading()

@@ -15,7 +15,19 @@ _WM_QUIT = 0x0012
 _WM_MOUSEWHEEL = 0x020A
 _WM_MOUSEHWHEEL = 0x020E
 _WM_MOUSEMOVE = 0x0200
+_WM_LBUTTONDOWN = 0x0201
+_WM_LBUTTONUP = 0x0202
 _VK_LBUTTON = 0x01
+
+
+class _LowLevelMouseEvent(ctypes.Structure):
+    _fields_ = [
+        ("point", wintypes.POINT),
+        ("mouse_data", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("extra_info", ctypes.c_size_t),
+    ]
 
 
 class MouseWheelGuard:
@@ -27,11 +39,14 @@ class MouseWheelGuard:
         on_blocked: Callable[[], None],
         should_block_left_drag: Callable[[], bool] | None = None,
         on_left_drag_blocked: Callable[[], None] | None = None,
+        on_left_click: Callable[[int, int], None] | None = None,
     ) -> None:
         self._should_block = should_block
         self._on_blocked = on_blocked
         self._should_block_left_drag = should_block_left_drag
         self._on_left_drag_blocked = on_left_drag_blocked
+        self._on_left_click = on_left_click
+        self._left_down_point: tuple[int, int] | None = None
         self._lock = threading.Lock()
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
@@ -119,6 +134,27 @@ class MouseWheelGuard:
             message: int,
             event_data: int,
         ) -> int:
+            if code == _HC_ACTION and message in {_WM_LBUTTONDOWN, _WM_LBUTTONUP}:
+                try:
+                    point = ctypes.cast(
+                        event_data, ctypes.POINTER(_LowLevelMouseEvent)
+                    ).contents.point
+                    mouse_point = (int(point.x), int(point.y))
+                    if message == _WM_LBUTTONDOWN:
+                        self._left_down_point = mouse_point
+                    else:
+                        start = self._left_down_point
+                        self._left_down_point = None
+                        if (
+                            start is not None
+                            and abs(start[0] - mouse_point[0]) <= 5
+                            and abs(start[1] - mouse_point[1]) <= 5
+                            and self._on_left_click is not None
+                        ):
+                            self._on_left_click(*mouse_point)
+                except Exception:  # noqa: BLE001
+                    # Never let optional click reporting interfere with game input.
+                    self._left_down_point = None
             if code == _HC_ACTION and message in {
                 _WM_MOUSEWHEEL,
                 _WM_MOUSEHWHEEL,

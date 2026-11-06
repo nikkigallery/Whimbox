@@ -4,8 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from whimbox.common.cvars import (
+    TaskResumedDuringRestartableOperation,
     current_stop_flag,
     reset_task_pause,
+    restart_operation_on_task_resume,
     task_resume_generation,
     toggle_task_pause,
     wait_for_task_resume,
@@ -35,6 +37,57 @@ class TaskPauseTests(unittest.TestCase):
             self.assertEqual(task_resume_generation(), before + 1)
         finally:
             current_stop_flag.reset(token)
+
+    def test_restartable_operation_interrupts_after_resume(self):
+        with self.assertRaises(TaskResumedDuringRestartableOperation):
+            with restart_operation_on_task_resume():
+                self.assertTrue(toggle_task_pause())
+                self.assertFalse(toggle_task_pause())
+
+    def test_restartable_operation_preserves_stop_request(self):
+        stop_flag = threading.Event()
+        token = current_stop_flag.set(stop_flag)
+        try:
+            with restart_operation_on_task_resume():
+                self.assertTrue(toggle_task_pause())
+                stop_flag.set()
+                self.assertFalse(wait_for_task_resume())
+        finally:
+            current_stop_flag.reset(token)
+
+    def test_path_teleport_returns_to_main_and_retries_after_resume(self):
+        task = object.__new__(AutoPathTask)
+        task.stop_flag = threading.Event()
+        task.path_info = SimpleNamespace(map="miraland")
+        task.jump_controller = None
+        task.last_position = (1, 2)
+        task.once_loop_time = 1
+        task._teleport_resume_handled_generation = None
+        task.need_stop = Mock(return_value=False)
+        task.stop_move = Mock()
+        task.clear_stuck = Mock()
+        task.log_to_gui = Mock()
+
+        attempts = []
+
+        def teleport(*args):
+            attempts.append(args)
+            if len(attempts) == 1:
+                self.assertTrue(toggle_task_pause())
+                self.assertFalse(toggle_task_pause())
+                wait_for_task_resume()
+
+        with (
+            patch("whimbox.task.navigation_task.auto_path_task.nikki_map.bigmap_tp", side_effect=teleport),
+            patch("whimbox.task.navigation_task.auto_path_task.back_to_page_main", return_value=True) as back,
+        ):
+            self.assertTrue(task._teleport_with_pause_recovery((10, 20)))
+
+        self.assertEqual(attempts, [((10, 20), "miraland")] * 2)
+        back.assert_called_once_with(timeout=30, max_esc=12)
+        self.assertEqual(task._teleport_resume_handled_generation, task_resume_generation())
+        self.assertIsNone(task.last_position)
+        self.assertEqual(task.once_loop_time, 0)
 
     def test_stopping_a_paused_task_unblocks_the_waiter(self):
         manager = TaskManager()
@@ -125,6 +178,44 @@ class TaskPauseTests(unittest.TestCase):
             task._resume_after_pause()
 
         self.assertEqual(task.curr_target_point_id, 1)
+
+    def test_path_stop_cleanup_skips_capture_and_releases_held_inputs(self):
+        task = object.__new__(AutoPathTask)
+        task.stop_flag = threading.Event()
+        task.stop_flag.set()
+        task.last_teleport_point_id = 0
+        task.click_skip_monitor = None
+        task.move_controller = Mock()
+        task.jump_controller = Mock()
+        task.stop_move = Mock()
+        task.change_to_walk = Mock()
+
+        with patch("whimbox.task.navigation_task.auto_path_task.itt") as interaction:
+            task.clear_all()
+
+        task.change_to_walk.assert_not_called()
+        interaction.release_held_inputs.assert_called_once_with()
+        self.assertIsNone(task.jump_controller)
+        self.assertIsNone(task.move_controller)
+
+    def test_path_stop_during_cleanup_capture_does_not_raise(self):
+        task = object.__new__(AutoPathTask)
+        task.stop_flag = threading.Event()
+        task.last_teleport_point_id = 0
+        task.click_skip_monitor = None
+        task.move_controller = Mock()
+        task.jump_controller = Mock()
+        task.stop_move = Mock()
+
+        def stop_during_capture():
+            task.stop_flag.set()
+            raise RuntimeError("capture aborted by stop")
+
+        task.change_to_walk = Mock(side_effect=stop_during_capture)
+        with patch("whimbox.task.navigation_task.auto_path_task.itt") as interaction:
+            task.clear_all()
+
+        interaction.release_held_inputs.assert_called_once_with()
 
 
 if __name__ == "__main__":

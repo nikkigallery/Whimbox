@@ -304,6 +304,16 @@ def _get_stop_hotkey() -> str:
     return "/"
 
 
+def _get_pause_hotkey() -> str:
+    try:
+        key = global_config.get("Whimbox", "pause_key")
+        if isinstance(key, str) and key.strip():
+            return key.strip()
+    except Exception:
+        pass
+    return "]"
+
+
 def _is_hotkey_match(key: keyboard.Key | keyboard.KeyCode, configured: str) -> bool:
     if not configured:
         return False
@@ -327,9 +337,10 @@ def _start_overlay_hotkey_listener() -> None:
         global _last_overlay_hotkey_ts, _last_pause_hotkey_ts, _pause_hotkey_down
         try:
             configured = _get_stop_hotkey()
+            pause_key = _get_pause_hotkey()
             if (
-                configured != ">"
-                and _is_hotkey_match(key, ">")
+                configured != pause_key
+                and _is_hotkey_match(key, pause_key)
                 and has_foreground_task()
             ):
                 if _pause_hotkey_down:
@@ -344,7 +355,7 @@ def _start_overlay_hotkey_listener() -> None:
                     from whimbox.interaction.interaction_core import itt
 
                     itt.release_held_inputs()
-                message = "任务已暂停，按 > 继续" if paused else "任务已继续"
+                message = f"任务已暂停，按 {pause_key} 继续" if paused else "任务已继续"
                 logger.info(message)
                 for task_info in task_manager.get_active():
                     _notify_run_log(
@@ -378,7 +389,8 @@ def _start_overlay_hotkey_listener() -> None:
 
     def on_release(key):
         global _pause_hotkey_down
-        if _is_hotkey_match(key, ">") or _is_hotkey_match(key, "."):
+        pause_key = _get_pause_hotkey()
+        if _is_hotkey_match(key, pause_key) or (pause_key == ">" and _is_hotkey_match(key, ".")):
             _pause_hotkey_down = False
 
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
@@ -961,6 +973,14 @@ async def _dispatch(method: str, params: Dict[str, Any]) -> Any:
     result = handle_background_method(method, params)
     if result is not UNHANDLED:
         return result
+
+    if method == "map_mask.get_point_detail":
+        point_id = params.get("point_id")
+        if not isinstance(point_id, str) or not point_id:
+            raise ValueError("point_id is required")
+        from whimbox.map.mask.service import map_mask_service
+
+        return await asyncio.to_thread(map_mask_service.get_point_detail, point_id)
 
     result = handle_map_mask_method(method, params)
     if result is not UNHANDLED:

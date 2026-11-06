@@ -18,6 +18,10 @@
             "value": "/",
             "description": "停止任务/显示小窗 的快捷键"
         },
+        "pause_key": {
+            "value": "]",
+            "description": "暂停/继续任务的快捷键"
+        },
         "launcher_path": {
             "value": "",
             "description": "叠纸启动器路径(launcher.exe的完整路径)"
