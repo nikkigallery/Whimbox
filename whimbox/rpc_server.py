@@ -8,7 +8,7 @@ from uuid import uuid4
 import websockets
 from pynput import keyboard
 
-from whimbox.common.cvars import RPC_CONFIG, has_foreground_task
+from whimbox.common.cvars import RPC_CONFIG, has_foreground_task, toggle_task_pause
 from whimbox.common.logger import logger
 from whimbox.common.scripts_watcher import scripts_watcher
 from whimbox.config.config import global_config
@@ -34,6 +34,8 @@ _client_send_locks: Dict[Any, asyncio.Lock] = {}
 _loop: Optional[asyncio.AbstractEventLoop] = None
 _overlay_hotkey_listener: Optional[keyboard.Listener] = None
 _last_overlay_hotkey_ts = 0.0
+_last_pause_hotkey_ts = 0.0
+_pause_hotkey_down = False
 _agent_stopping_sessions: Set[str] = set()
 _task_stopping_run_ids: Set[str] = set()
 _agent_active_tool_call_ids: Dict[str, str] = {}
@@ -322,9 +324,37 @@ def _start_overlay_hotkey_listener() -> None:
         return
 
     def on_press(key):
-        global _last_overlay_hotkey_ts
+        global _last_overlay_hotkey_ts, _last_pause_hotkey_ts, _pause_hotkey_down
         try:
             configured = _get_stop_hotkey()
+            if (
+                configured != ">"
+                and _is_hotkey_match(key, ">")
+                and has_foreground_task()
+            ):
+                if _pause_hotkey_down:
+                    return
+                _pause_hotkey_down = True
+                now = time.monotonic()
+                if now - _last_pause_hotkey_ts < 0.25:
+                    return
+                _last_pause_hotkey_ts = now
+                paused = toggle_task_pause()
+                if paused:
+                    from whimbox.interaction.interaction_core import itt
+
+                    itt.release_held_inputs()
+                message = "任务已暂停，按 > 继续" if paused else "任务已继续"
+                logger.info(message)
+                for task_info in task_manager.get_active():
+                    _notify_run_log(
+                        session_id=task_info["session_id"],
+                        run_id=task_info["task_id"],
+                        source="task",
+                        message=message,
+                        raw_message=message,
+                    )
+                return
             if not _is_hotkey_match(key, configured):
                 return
 
@@ -346,7 +376,12 @@ def _start_overlay_hotkey_listener() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"overlay hotkey listener error: {exc}")
 
-    listener = keyboard.Listener(on_press=on_press)
+    def on_release(key):
+        global _pause_hotkey_down
+        if _is_hotkey_match(key, ">") or _is_hotkey_match(key, "."):
+            _pause_hotkey_down = False
+
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.daemon = True
     listener.start()
     _overlay_hotkey_listener = listener

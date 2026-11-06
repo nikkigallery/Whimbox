@@ -2,7 +2,7 @@ from whimbox.common.logger import logger
 from whimbox.common.utils.ui_utils import back_to_page_main
 from whimbox.common.cvars import (
     current_stop_flag, 
-    set_foreground_task_running
+    set_foreground_task_running, reset_task_pause, wait_for_task_resume,
 )
 from whimbox.config.config import global_config
 from whimbox.common.cvars import get_current_run_id
@@ -192,10 +192,13 @@ class TaskTemplate:
         try:
             # 如果是顶层任务，设置前台任务运行标志
             if self.is_top_level_task:
+                reset_task_pause()
                 set_foreground_task_running(True)
                 _disable_active_map_mask()
                 if self.show_stop_key_message:
                     self.log_to_gui("你可以按 " + self._get_stop_hotkey() + " 键，随时停止任务")
+                    if self._get_stop_hotkey() != ">":
+                        self.log_to_gui("按 > 可暂停任务，再按一次继续")
             
             res = self._task_run()
             if res.status in [STATE_TYPE_SUCCESS, STATE_TYPE_STOP, STATE_TYPE_FAILED]:
@@ -212,6 +215,7 @@ class TaskTemplate:
         finally:
             # 如果是顶层任务，清除前台任务运行标志
             if self.is_top_level_task:
+                reset_task_pause()
                 if self.listener:
                     self.key_callbacks.clear()
                     if self.listener.is_alive():
@@ -294,6 +298,7 @@ class TaskTemplate:
         '''如果子类有自己额外的停止代码，就实现这个方法，并调用父类的这个方法'''
         if not self.stop_flag.is_set():
             self.stop_flag.set()
+        reset_task_pause()
         self.update_task_result(status=STATE_TYPE_STOP, message=message or "任务已停止", data=data)
 
         # 如果手动停止任务，就清空一下视角转速，因为有可能是因为视角乱转而导致用户手动停止了任务
@@ -304,6 +309,7 @@ class TaskTemplate:
         logger.info(f"停止任务: {self.name}")
 
     def need_stop(self):
+        wait_for_task_resume()
         if self.stop_flag.is_set():
             if self.task_result.status != STATE_TYPE_STOP:
                 self.update_task_result(status=STATE_TYPE_STOP, message="任务已停止")

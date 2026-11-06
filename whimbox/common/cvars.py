@@ -59,6 +59,45 @@ def get_current_run_id() -> str:
 # 全局前台任务运行标志（用于后台任务判断是否有前台任务在运行）
 _foreground_task_running = False
 _foreground_task_lock = threading.Lock()
+_task_pause_lock = threading.Lock()
+_task_can_run = threading.Event()
+_task_can_run.set()
+_task_resume_generation = 0
+
+
+def reset_task_pause() -> None:
+    with _task_pause_lock:
+        _task_can_run.set()
+
+
+def toggle_task_pause() -> bool:
+    """Toggle the foreground task; return True when it is now paused."""
+    global _task_resume_generation
+    with _task_pause_lock:
+        if _task_can_run.is_set():
+            _task_can_run.clear()
+            return True
+        _task_resume_generation += 1
+        _task_can_run.set()
+        return False
+
+
+def task_resume_generation() -> int:
+    with _task_pause_lock:
+        return _task_resume_generation
+
+
+def is_task_paused() -> bool:
+    return not _task_can_run.is_set()
+
+
+def wait_for_task_resume() -> bool:
+    """Wait without blocking the stop hotkey. False means the task was stopped."""
+    stop_flag = current_stop_flag.get()
+    while not _task_can_run.wait(0.1):
+        if stop_flag is not None and stop_flag.is_set():
+            return False
+    return stop_flag is None or not stop_flag.is_set()
 
 def set_foreground_task_running(running: bool):
     """设置前台任务运行状态"""

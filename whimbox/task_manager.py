@@ -4,6 +4,8 @@ from threading import Event, Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+from whimbox.common.cvars import reset_task_pause
+
 
 @dataclass
 class TaskInfo:
@@ -82,6 +84,7 @@ class TaskManager:
             if not task:
                 return False
             task.stop_event.set()
+            reset_task_pause()
             return True
 
     def stop_all(self) -> list[Dict[str, Any]]:
@@ -91,6 +94,8 @@ class TaskManager:
                 if task.state in {"PENDING", "RUNNING"}:
                     task.stop_event.set()
                     stopped.append(task.to_dict())
+        if stopped:
+            reset_task_pause()
         return stopped
 
     def has_active(self, session_id: str | None = None) -> bool:
@@ -118,6 +123,14 @@ class TaskManager:
         )
         return active
 
+    def get_active(self) -> list[Dict[str, Any]]:
+        with self._lock:
+            return [
+                task.to_dict()
+                for task in self._tasks.values()
+                if task.state in {"PENDING", "RUNNING"}
+            ]
+
     def stop_active_for_session(self, session_id: str) -> list[Dict[str, Any]]:
         stopped: list[Dict[str, Any]] = []
         with self._lock:
@@ -128,6 +141,8 @@ class TaskManager:
                     continue
                 task.stop_event.set()
                 stopped.append(task.to_dict())
+        if stopped:
+            reset_task_pause()
         return stopped
 
 

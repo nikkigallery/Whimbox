@@ -38,6 +38,9 @@ class InteractionBGD:
         self.itt_exec = None
         self.capture_obj = None
         self.operation_lock = threading.Lock()
+        self._held_input_lock = threading.Lock()
+        self._held_keys = set()
+        self._held_mouse_buttons = set()
         import whimbox.interaction.interaction_normal
         self.itt_exec = whimbox.interaction.interaction_normal.InteractionNormal(self.hwnd_handler)
         from whimbox.interaction.capture import PrintWindowCapture
@@ -58,6 +61,8 @@ class InteractionBGD:
             numpy.ndarray: 图片数组
         """
 
+        if not wait_for_task_resume():
+            return None
         ret = self.capture_obj.capture()
         if anchor_posi is not None:
             ret = crop(ret, anchor_posi)
@@ -299,6 +304,8 @@ class InteractionBGD:
         """装饰器方法：在操作前进行检查"""
         def outwrapper(func):
             def wrapper(self, *args, **kwargs):
+                if not wait_for_task_resume():
+                    return None
                 if print_log:
                     func_name = inspect.getframeinfo(inspect.currentframe().f_back)[2]
                     func_name_2 = inspect.getframeinfo(inspect.currentframe().f_back.f_back)[2]
@@ -331,12 +338,18 @@ class InteractionBGD:
     @before_operation()
     def left_down(self):
         """左键按下"""
-        self.itt_exec.left_down()
+        with self._held_input_lock:
+            if is_task_paused():
+                return
+            self.itt_exec.left_down()
+            self._held_mouse_buttons.add("left")
 
     @before_operation()
     def left_up(self):
         """左键抬起"""
-        self.itt_exec.left_up()
+        with self._held_input_lock:
+            self.itt_exec.left_up()
+            self._held_mouse_buttons.discard("left")
 
     @before_operation()
     def left_double_click(self, dt=0.05):
@@ -350,12 +363,18 @@ class InteractionBGD:
     @before_operation()
     def right_down(self):
         """右键按下"""
-        self.itt_exec.right_down()
+        with self._held_input_lock:
+            if is_task_paused():
+                return
+            self.itt_exec.right_down()
+            self._held_mouse_buttons.add("right")
 
     @before_operation()
     def right_up(self):
         """右键抬起"""
-        self.itt_exec.right_up()
+        with self._held_input_lock:
+            self.itt_exec.right_up()
+            self._held_mouse_buttons.discard("right")
 
     @before_operation()
     def right_click(self):
@@ -382,13 +401,29 @@ class InteractionBGD:
             key (str): 按键代号。查阅vkCode.py
         """
         if key == "mouse_left":
-            self.itt_exec.left_down()
+            with self._held_input_lock:
+                if is_task_paused():
+                    return
+                self.itt_exec.left_down()
+                self._held_mouse_buttons.add("left")
         elif key == "mouse_right":
-            self.itt_exec.right_down()
+            with self._held_input_lock:
+                if is_task_paused():
+                    return
+                self.itt_exec.right_down()
+                self._held_mouse_buttons.add("right")
         elif key == "mouse_middle":
-            self.itt_exec.middle_down()
+            with self._held_input_lock:
+                if is_task_paused():
+                    return
+                self.itt_exec.middle_down()
+                self._held_mouse_buttons.add("middle")
         else:
-            self.itt_exec.key_down(key)
+            with self._held_input_lock:
+                if is_task_paused():
+                    return
+                self.itt_exec.key_down(key)
+                self._held_keys.add(key)
 
     @before_operation()
     def key_up(self, key):
@@ -398,13 +433,33 @@ class InteractionBGD:
             key (str): 按键代号。查阅vkCode.py
         """
         if key == "mouse_left":
-            self.itt_exec.left_up()
+            with self._held_input_lock:
+                self.itt_exec.left_up()
+                self._held_mouse_buttons.discard("left")
         elif key == "mouse_right":
-            self.itt_exec.right_up()
+            with self._held_input_lock:
+                self.itt_exec.right_up()
+                self._held_mouse_buttons.discard("right")
         elif key == "mouse_middle":
-            self.itt_exec.middle_up()
+            with self._held_input_lock:
+                self.itt_exec.middle_up()
+                self._held_mouse_buttons.discard("middle")
         else:
+            with self._held_input_lock:
+                self.itt_exec.key_up(key)
+                self._held_keys.discard(key)
+
+    def release_held_inputs(self):
+        """Release automation-held inputs without waiting on the pause gate."""
+        with self._held_input_lock:
+            keys = tuple(self._held_keys)
+            buttons = tuple(self._held_mouse_buttons)
+            self._held_keys.clear()
+            self._held_mouse_buttons.clear()
+        for key in keys:
             self.itt_exec.key_up(key)
+        for button in buttons:
+            getattr(self.itt_exec, f"{button}_up")()
 
     @before_operation()
     def key_press(self, key):

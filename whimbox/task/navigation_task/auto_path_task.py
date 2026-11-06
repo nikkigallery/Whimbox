@@ -16,6 +16,7 @@ from whimbox.action.fairy_animal import FairyAnimalTask
 from whimbox.action.fishing import FishingTask, FISHING_TYPE_MIRALAND, FISHING_TYPE_HOME
 from whimbox.common.base_threading import BaseThreading
 from whimbox.common.keybind import keybind
+from whimbox.common.cvars import task_resume_generation
 from whimbox.common.scripts_manager import *
 from whimbox.map.convert import convert_GameLoc_to_PngMapPx
 from whimbox.ui.ui import ui_control
@@ -175,7 +176,7 @@ class AutoPathTask(TaskTemplate):
         return True
 
     def task_stop(self, message="手动停止跑图"):
-        if not self.need_stop():
+        if not self.stop_flag.is_set():
             super().task_stop(message=message)
 
     def _update_next_target_point(self):
@@ -275,10 +276,24 @@ class AutoPathTask(TaskTemplate):
 
     @register_step("自动跑图中……")
     def step1(self):
+        seen_resume_generation = task_resume_generation()
         itt.key_press("alt") # 开始跑图前按一下alt，避免游戏自身偶发bug，鼠标还在大世界界面中
+
+        def resume_if_needed():
+            nonlocal seen_resume_generation
+            current_generation = task_resume_generation()
+            if current_generation == seen_resume_generation:
+                return False
+            seen_resume_generation = current_generation
+            self._resume_after_pause()
+            return True
+
         while not self.need_stop():
+            resume_if_needed()
             start_time = time.time()
             is_end = self.inner_step_update_target()
+            if resume_if_needed():
+                continue
             if is_end:
                 break
             # 采集到预期数量的素材后，也可以停止跑图流程
@@ -286,14 +301,47 @@ class AutoPathTask(TaskTemplate):
                 break
             if self.need_stop():
                 break
+            if resume_if_needed():
+                continue
             self.inner_step_change_view()
+            if resume_if_needed():
+                continue
             if self.need_stop():
                 break
+            if resume_if_needed():
+                continue
             self.inner_step_control_move()
+            if resume_if_needed():
+                continue
             self.check_interruption()
             time.sleep(self.step_sleep)
             self.once_loop_time = time.time() - start_time
         return "step2"
+
+    def _resume_after_pause(self):
+        self.stop_move()
+        if self.jump_controller:
+            self.jump_controller.clear_jump_state()
+        self.log_to_gui("任务继续，重新定位跑图位置")
+        nikki_map.reinit_smallmap()
+        back_to_page_main()
+        self.curr_position = nikki_map.get_position()
+        self.last_position = None
+        self.once_loop_time = 0
+        self.clear_stuck()
+
+        target = self.path_points[self.curr_target_point_id]
+        if (
+            nikki_map.map_name != self.path_info.map
+            or euclidean_distance(self.curr_position, target.position)
+            >= not_teleport_offset
+        ):
+            self.curr_target_point_id = self.last_teleport_point_id
+            self.target_point = self.path_points[self.curr_target_point_id]
+            self.need_move_mode = MOVE_MODE_WALK
+            self.last_need_move_mode = MOVE_MODE_WALK
+            self.current_game_move_mode = MOVE_MODE_WALK
+            self.log_to_gui("偏离路线，回到上次经过的路线传送点继续")
 
 
     def check_stuck(self):
