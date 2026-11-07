@@ -79,7 +79,6 @@ class MapMaskService:
             should_block=self._should_block_mouse_wheel,
             on_blocked=self._note_mouse_wheel_blocked,
             should_block_left_drag=self._should_block_map_drag,
-            on_left_click=self._notify_bigmap_click,
         )
 
     def _touch_detection_worker(self, map_name: str | None) -> None:
@@ -259,23 +258,6 @@ class MapMaskService:
 
     def _note_mouse_wheel_blocked(self) -> None:
         self._last_blocked_wheel_monotonic = time.monotonic()
-
-    def _notify_bigmap_click(self, screen_x: int, screen_y: int) -> None:
-        if not self._should_block_mouse_wheel():
-            return
-        left, top, width, height = HANDLE_OBJ.get_window_rect()
-        if width <= 0 or height <= 0:
-            return
-        relative_x = (screen_x - left) / width
-        relative_y = (screen_y - top) / height
-        if not (0 <= relative_x <= 1 and 0 <= relative_y <= 1):
-            return
-        from whimbox.rpc_server import notify_event
-
-        notify_event(
-            "event.map_mask.bigmap_click",
-            {"relative_x": relative_x, "relative_y": relative_y},
-        )
 
     def _should_block_map_drag(self) -> bool:
         if (
