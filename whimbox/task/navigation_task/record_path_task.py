@@ -101,8 +101,10 @@ class RecordPathTask(TaskTemplate):
 
     def save_path(self):
         self.log_to_gui(f"保存路线中，请稍等。。。")
-        end_position = nikki_map.get_position()
-        self._add_point(end_position, POINT_TYPE_TARGET)
+        # 停止录制后截图接口会返回空图；末尾点沿用录制期间缓存的位置和移动模式。
+        end_position = nikki_map.get_position(use_cache=True)
+        end_move_mode = self.path_point_list[-1].move_mode
+        self._add_point(end_position, POINT_TYPE_TARGET, end_move_mode)
 
         # 优化路线
         optimize_path(self.path_point_list)
