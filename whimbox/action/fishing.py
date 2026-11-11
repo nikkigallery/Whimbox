@@ -283,6 +283,9 @@ class FishingTask(TaskTemplate):
             else:
                 break
 
+        if self.need_stop():
+            return FishingResult.SUCCESS
+
         # 判断钓鱼类型
         if self.fishing_type is None:
             self.fishing_type = self.get_fishing_type()

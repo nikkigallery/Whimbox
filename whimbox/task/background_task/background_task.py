@@ -387,6 +387,9 @@ class BackgroundTask:
                 # 检测各种画面状态
                 try:
                     cap = itt.capture()
+                    if cap is None:
+                        time.sleep(self.check_interval)
+                        continue
                     
                     # 检测采集状态 - 根据间隔执行
                     pickup_config = self.manager.get_feature_config(BackgroundFeature.AUTO_PICKUP)
@@ -397,7 +400,7 @@ class BackgroundTask:
                                 itt.key_press(keybind.KEYBIND_INTERACTION)
                                 time.sleep(0.02)
                                 cap = itt.capture()
-                                if not self._detect_pickup_opportunity(cap):
+                                if cap is None or not self._detect_pickup_opportunity(cap):
                                     break
 
                     # 检测萤火虫套状态 - 根据间隔执行
@@ -480,14 +483,16 @@ class BackgroundTask:
         acquire_result = self._try_enter_background_tool(session_id=session_id, tool_id=tool_id)
         if not acquire_result.acquired:
             logger.info("后台自动钓鱼跳过：game_runtime 正被前台占用")
+            current_session_id.reset(token)
             return
-        self._notify_background_status(
-            session_id=session_id,
-            phase="started",
-            tool_id=tool_id,
-            detail="auto_fishing",
-        )
+        fishing_task = None
         try:
+            self._notify_background_status(
+                session_id=session_id,
+                phase="started",
+                tool_id=tool_id,
+                detail="auto_fishing",
+            )
             # 停止鼠标监听，避免干扰鼠标点击
             self._stop_mouse_listener()
             self.log_to_gui("检测到钓鱼界面，开始自动钓鱼", type="add_ai_message")
@@ -497,8 +502,6 @@ class BackgroundTask:
             # 这里显式补回停止热键绑定。
             fishing_task.add_hotkey(global_config.get("Whimbox", "stop_key"), fishing_task.task_stop)
             fishing_task.step2()
-             # 因为不是完整的task运行流程，所以手动清除current_stop_flag
-            current_stop_flag.set(None)
             if fishing_task.task_result.status == STATE_TYPE_SUCCESS:
                 self.log_to_gui(f"自动钓鱼完成: {fishing_task.task_result.message}", type="finalize_ai_message")
                 self._notify_background_status(
@@ -526,17 +529,40 @@ class BackgroundTask:
                     error=str(fishing_task.task_result.message or "自动钓鱼失败"),
                 )
         except Exception as e:
-            logger.error(f"自动钓鱼出错: {e}")
-            self._notify_background_status(
-                session_id=session_id,
-                phase="error",
-                tool_id=tool_id,
-                error=str(e),
-            )
+            if fishing_task is not None and fishing_task.stop_flag.is_set():
+                # 停止键可能恰好落在一次截图/识别中，不把这类中断当成任务故障。
+                self.log_to_gui("手动停止钓鱼", is_stopped=True, type="finalize_ai_message")
+                self._notify_background_status(
+                    session_id=session_id,
+                    phase="cancelled",
+                    tool_id=tool_id,
+                    result={"status": "stop", "message": str(fishing_task.task_result.message or "手动停止")},
+                )
+                time.sleep(5)
+            else:
+                logger.error(f"自动钓鱼出错: {e}")
+                self._notify_background_status(
+                    session_id=session_id,
+                    phase="error",
+                    tool_id=tool_id,
+                    error=str(e),
+                )
         finally:
-            self._leave_background_tool(session_id=session_id, tool_id=tool_id)
-            current_session_id.reset(token)
-            self._start_mouse_listener()
+            # 直接执行 step2 不会经过 TaskTemplate.task_run 的监听器清理。
+            try:
+                if fishing_task is not None and fishing_task.listener is not None:
+                    fishing_task.key_callbacks.clear()
+                    if fishing_task.listener.is_alive():
+                        fishing_task.listener.stop()
+                        fishing_task.listener.join()
+            finally:
+                # 停止后即使 step2 抛异常，也不能把已停止的标志留在后台检测线程。
+                current_stop_flag.set(None)
+                try:
+                    self._leave_background_tool(session_id=session_id, tool_id=tool_id)
+                finally:
+                    current_session_id.reset(token)
+                    self._start_mouse_listener()
 
     def _detect_dialogue_opportunity(self, cap) -> bool:
         """检测是否进入对话"""
