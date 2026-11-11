@@ -389,6 +389,7 @@ class AutoPathTask(TaskTemplate):
                     self.log_to_gui("卡住5秒了，尝试跳一下", is_loading=True)
                     self.jump_controller.stop_jump()
                     self.move_controller.stop_move_ahead()
+                    self.jump_controller.try_little_jump()
                     time.sleep(1)
                     self.move_controller.start_simple_move_ahead(1)
                     self.jump_controller.start_jump()

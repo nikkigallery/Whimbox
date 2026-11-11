@@ -75,6 +75,11 @@ class JumpController(AdvanceThreading):
         self._jump_state = JumpState.DOUBLE_JUMP
         logger.debug('start double jump')
 
+    def try_little_jump(self):
+        itt.key_down(keybind.KEYBIND_JUMP)
+        time.sleep(0.2)
+        itt.key_up(keybind.KEYBIND_JUMP)
+
     def stop_jump(self):
         if self._jump_state == JumpState.IDLE or get_move_mode_in_game() == MOVE_MODE_WALK:
             return
