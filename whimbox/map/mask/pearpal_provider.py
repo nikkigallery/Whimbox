@@ -53,9 +53,6 @@ _STAR_CATALOG_IDS = frozenset({"11", "132", "145", "167", "244"})
 _DEWDROP_CATALOG_IDS = frozenset({"12", "133", "146", "168", "245"})
 # Website source merges reading collectible IDs into the user info ``read`` list.
 _READ_CATALOG_IDS = frozenset({"20"})
-_USER_REFRESH_PERIOD_SECONDS = 15.0
-_USER_REFRESH_MIN_INTERVAL_SECONDS = 5.0
-_USER_REFRESH_BACKOFF_SECONDS = (5.0, 15.0, 30.0, 60.0)
 _DETAIL_CACHE_SECONDS = 600.0
 
 
@@ -138,15 +135,13 @@ class OfficialPearPalProvider:
         self._auth_error = ""
         self._hide_awarded = True
         self._auth_thread: threading.Thread | None = None
-        self._refresh_thread: threading.Thread | None = None
         self._refreshing = False
+        self._pending_map_opens = 0
         self._refresh_error = ""
         self._refresh_failure_count = 0
         self._refresh_reason = ""
         self._last_refresh_at = ""
         self._last_refresh_reason = ""
-        self._last_refresh_monotonic = 0.0
-        self._next_refresh_monotonic = 0.0
         self._overlay_bigmap_open = False
 
     def list_labels(self) -> list[MapMaskLabel]:
@@ -318,138 +313,94 @@ class OfficialPearPalProvider:
     def refresh_user_state(self) -> dict[str, Any]:
         if not self.enabled:
             raise RuntimeError("OfficialPearPalProvider is disabled")
-        self._schedule_user_refresh(reason="manual", force=True)
+        self._schedule_user_refresh(reason="manual")
         return self.get_user_status()
 
     def note_overlay_activity(self, *, is_bigmap_open: bool) -> None:
-        now = time.monotonic()
+        """Consume confirmed open/world observations. An unchanged page needs no request."""
         with self._lock:
-            was_bigmap_open = self._overlay_bigmap_open
-            self._overlay_bigmap_open = bool(is_bigmap_open)
-            if self._credentials is None:
+            if self._overlay_bigmap_open == is_bigmap_open:
                 return
-            map_opened = bool(is_bigmap_open) and not was_bigmap_open
-            retry_due = (
-                self._refresh_failure_count > 0
-                and now >= self._next_refresh_monotonic
-            )
-            periodic_due = (
-                self._last_refresh_monotonic <= 0.0
-                or now - self._last_refresh_monotonic
-                >= _USER_REFRESH_PERIOD_SECONDS
-            )
-        if map_opened:
-            self._schedule_user_refresh(reason="map-open", force=False)
-        elif retry_due:
-            self._schedule_user_refresh(reason="retry", force=False)
-        elif periodic_due:
-            self._schedule_user_refresh(reason="periodic", force=False)
+            self._overlay_bigmap_open = is_bigmap_open
+            generation = self._auth_generation
+        if is_bigmap_open:
+            self._schedule_user_refresh(reason="map-open", generation=generation)
 
-    def note_overlay_inactive(self) -> None:
+    def reset_overlay_activity(self) -> None:
         with self._lock:
+            self._pending_map_opens = 0
             self._overlay_bigmap_open = False
 
-    def _schedule_user_refresh(self, *, reason: str, force: bool) -> bool:
+    def _schedule_user_refresh(
+        self, *, reason: str, generation: int | None = None,
+    ) -> None:
         with self._lock:
             credentials = self._credentials
-            refresh_thread_running = bool(
-                self._refresh_thread is not None
-                and self._refresh_thread.is_alive()
-            )
-            if credentials is None or self._refreshing or refresh_thread_running:
-                return False
-            now = time.monotonic()
-            if not force and now < self._next_refresh_monotonic:
-                return False
+            if credentials is None or (generation is not None and generation != self._auth_generation):
+                return
+            if self._refreshing:
+                if reason == "map-open":
+                    self._pending_map_opens += 1
+                return
             self._refreshing = True
             self._refresh_error = ""
             self._refresh_reason = reason
             auth_generation = self._auth_generation
-            if self._refresh_background:
-                thread = threading.Thread(
-                    target=self._refresh_user_state,
-                    args=(credentials, reason, auth_generation),
-                    name="map-mask-pearpal-user-refresh",
-                    daemon=True,
-                )
-                self._refresh_thread = thread
-            else:
-                thread = None
-        if thread is None:
-            self._refresh_user_state(credentials, reason, auth_generation)
+            client = self._user_client
+        if self._refresh_background:
+            threading.Thread(
+                target=self._refresh_user_state,
+                args=(client, credentials, reason, auth_generation),
+                name="map-mask-pearpal-user-refresh",
+                daemon=True,
+            ).start()
         else:
-            thread.start()
-        return True
+            self._refresh_user_state(client, credentials, reason, auth_generation)
 
     def _refresh_user_state(
         self,
+        client: PearPalUserClient,
         credentials: PearPalCredentials,
         reason: str,
         auth_generation: int,
     ) -> None:
-        try:
-            awarded_state = self._user_client.fetch_awarded_state(credentials)
-        except Exception as exc:  # noqa: BLE001
-            should_log = False
+        while True:
             with self._lock:
-                if (
-                    self._auth_generation == auth_generation
-                    and self._credentials == credentials
-                ):
-                    self._refreshing = False
-                    self._refresh_error = str(exc)
-                    self._refresh_reason = ""
+                if self._auth_generation != auth_generation:
+                    return
+            try:
+                awarded_state = client.fetch_awarded_state(credentials)
+                error = ""
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc) or type(exc).__name__
+                logger.warning(f"failed to refresh PearPal user collection state: {type(exc).__name__}: {exc}")
+            with self._lock:
+                if self._auth_generation != auth_generation:
+                    return
+                self._refresh_error = error
+                if error:
                     self._refresh_failure_count += 1
-                    backoff_index = min(
-                        self._refresh_failure_count - 1,
-                        len(_USER_REFRESH_BACKOFF_SECONDS) - 1,
-                    )
-                    self._next_refresh_monotonic = (
-                        time.monotonic()
-                        + _USER_REFRESH_BACKOFF_SECONDS[backoff_index]
-                    )
-                    should_log = True
-            if should_log:
-                logger.warning(
-                    "failed to refresh PearPal user collection state: "
-                    f"{type(exc).__name__}: {exc}"
-                )
-        else:
-            refreshed = False
-            with self._lock:
-                if (
-                    self._auth_generation == auth_generation
-                    and self._credentials == credentials
-                ):
-                    now = time.monotonic()
+                else:
                     self._set_awarded_state_locked(awarded_state)
-                    self._refreshing = False
-                    self._refresh_error = ""
                     self._refresh_failure_count = 0
-                    self._refresh_reason = ""
                     self._last_refresh_at = time.strftime(
                         "%Y-%m-%dT%H:%M:%SZ",
                         time.gmtime(),
                     )
                     self._last_refresh_reason = reason
-                    self._last_refresh_monotonic = now
-                    self._next_refresh_monotonic = (
-                        now + _USER_REFRESH_MIN_INTERVAL_SECONDS
+                    logger.info(
+                        "refreshed PearPal user collection state: "
+                        f"reason={reason}, star={len(awarded_state.star_ids)}, "
+                        f"dewdrop={len(awarded_state.dewdrop_ids)}, "
+                        f"box={len(awarded_state.box_ids)}, read={len(awarded_state.read_ids)}"
                     )
-                    refreshed = True
-            if refreshed:
-                logger.info(
-                    "refreshed PearPal user collection state: "
-                    f"reason={reason}, star={len(awarded_state.star_ids)}, "
-                    f"dewdrop={len(awarded_state.dewdrop_ids)}, "
-                    f"box={len(awarded_state.box_ids)}, "
-                    f"read={len(awarded_state.read_ids)}"
-                )
-        finally:
-            with self._lock:
-                if self._refresh_thread is threading.current_thread():
-                    self._refresh_thread = None
-
+                if not self._pending_map_opens:
+                    self._refreshing = False
+                    self._refresh_reason = ""
+                    return
+                # Each observed reopening gets one read, serialized with the active one.
+                self._pending_map_opens -= 1
+                reason = self._refresh_reason = "map-open"
 
     def get_user_status(self) -> dict[str, Any]:
         with self._lock:
@@ -461,12 +412,6 @@ class OfficialPearPalProvider:
                 matched_box,
                 matched_read,
             ) = self._matched_awarded_counts
-            next_refresh_in_seconds = 0.0
-            if credentials is not None and self._next_refresh_monotonic > 0.0:
-                next_refresh_in_seconds = max(
-                    0.0,
-                    self._next_refresh_monotonic - time.monotonic(),
-                )
             return {
                 "region": self._region,
                 "auth_state": self._auth_state,
@@ -481,7 +426,7 @@ class OfficialPearPalProvider:
                 "refresh_reason": self._refresh_reason,
                 "last_refresh_at": self._last_refresh_at,
                 "last_refresh_reason": self._last_refresh_reason,
-                "next_refresh_in_seconds": round(next_refresh_in_seconds, 1),
+                "next_refresh_in_seconds": 0.0,
                 "awarded_star_count": len(awarded.star_ids),
                 "awarded_dewdrop_count": len(awarded.dewdrop_ids),
                 "awarded_box_count": len(awarded.box_ids),
@@ -515,7 +460,6 @@ class OfficialPearPalProvider:
             with self._lock:
                 if self._auth_thread is threading.current_thread():
                     self._auth_thread = None
-        now = time.monotonic()
         with self._lock:
             if self._auth_generation != auth_generation:
                 return
@@ -532,10 +476,6 @@ class OfficialPearPalProvider:
                 time.gmtime(),
             )
             self._last_refresh_reason = "login"
-            self._last_refresh_monotonic = now
-            self._next_refresh_monotonic = (
-                now + _USER_REFRESH_MIN_INTERVAL_SECONDS
-            )
         logger.info(
             "loaded PearPal user collection state: "
             f"star={len(awarded_state.star_ids)}, "
@@ -545,6 +485,7 @@ class OfficialPearPalProvider:
         )
 
     def _reset_user_state_locked(self) -> None:
+        self._pending_map_opens = 0
         self._credentials = None
         self._set_awarded_state_locked(
             PearPalAwardedState(frozenset(), frozenset())
@@ -557,9 +498,6 @@ class OfficialPearPalProvider:
         self._refresh_reason = ""
         self._last_refresh_at = ""
         self._last_refresh_reason = ""
-        self._last_refresh_monotonic = 0.0
-        self._next_refresh_monotonic = 0.0
-        self._overlay_bigmap_open = False
 
     @staticmethod
     def _is_point_awarded(

@@ -1,3 +1,4 @@
+import time
 import typing as t
 import cv2
 
@@ -12,6 +13,7 @@ class MiniMap:
     def __init__(self):
         # Usually to be 0.4~0.5
         self.position_similarity = 0.
+        self.position_sample_time = 0.0
         # Usually > 0.05
         self.position_similarity_local = 0.
         # Current position on png
@@ -32,6 +34,7 @@ class MiniMap:
 
     def init_position(self, position: t.Tuple[int, int]):
         self.position = position
+        self.position_sample_time = 0.0
 
     def _get_minimap(self, image, radius):
         area = area_offset((-radius, -radius, radius, radius), offset=MINIMAP_CENTER)
@@ -125,6 +128,7 @@ class MiniMap:
             self.position_similarity = round(best_sim, 5)
             self.position_similarity_local = round(best_local_sim, 5)
             self.position = tuple(np.round(best_loca, 1))
+            self.position_sample_time = time.monotonic()
         return self.position
 
 
@@ -319,9 +323,6 @@ class MiniMap:
         degree = round(degree % 360, 3)
         self.rotation = degree
 
-        # Calculate confidence
-        self.rotation_confidence = round(peak_confidence(result), 3)
-
         # Convert
         if degree > 180:
             degree = 360 - degree
@@ -330,7 +331,9 @@ class MiniMap:
         self.rotation = degree
 
         # Calculate confidence
-        self.rotation_confidence = round(peak_confidence(result), 3)
+        # A flat response contains no camera direction, even if the peak
+        # confidence helper reports 1.0 for a signal with zero peaks.
+        self.rotation_confidence = round(peak_confidence(result), 3) if np.ptp(result) > 0 else 0.0
         return degree
 
 

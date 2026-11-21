@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -16,19 +17,23 @@ from whimbox.map.detection.cvars import (
     MINIMAP_RADIUS,
 )
 
+from .minimap_recovery import NearbyRecovery, consistent_motion
 from .models import MapMaskViewport
 
 
 _MINIMAP_UPDATE_INTERVAL_SECONDS = 0.02
+_HEADING_INTERVAL_SECONDS = 0.10
+HEADING_MAX_AGE_SECONDS = 0.6
+NAVIGATION_POSITION_MAX_AGE_SECONDS = 0.9
 _MINIMAP_CONFIDENCE_THRESHOLD = 0.15
 _MINIMAP_FAILURE_TIMEOUT_SECONDS = 5.0
 _MAIN_WORLD_EXIT_DEBOUNCE_SECONDS = 0.25
 _REENTRY_CONFIDENCE_THRESHOLD = 0.25
 _REENTRY_VALIDATION_TIMEOUT_SECONDS = 2.0
 _REENTRY_VALIDATION_REQUIRED_SUCCESSES = 3
-_REENTRY_CANDIDATE_TOLERANCE = 3.0
+_NEARBY_SEARCH_DELAY_SECONDS = 0.8
 _UNINITIALIZED_HINT = "请打开大地图完成小地图定位"
-_LOST_HINT = "小地图定位已失效，请打开大地图重新定位"
+_LOST_HINT = "正在附近重新定位，也可按 M 打开大地图校准"
 
 
 @dataclass(slots=True)
@@ -45,6 +50,9 @@ class MiniMapTrackingSnapshot:
     viewport: MapMaskViewport | None
     screen_width: int | None
     screen_height: int | None
+    camera_bearing: float | None = None
+    camera_sample_at: float = 0.0
+    position_sample_at: float = -math.inf
 
 
 class MiniMapPositionTracker:
@@ -64,6 +72,10 @@ class MiniMapPositionTracker:
         self._failure_count = 0
         self._failure_started_monotonic: float | None = None
         self._last_update_monotonic = 0.0
+        self._position_sample_at = -math.inf
+        self._camera_bearing: float | None = None
+        self._camera_sample_at = -math.inf
+        self._last_heading_attempt = -math.inf
         self._has_seen_main_world = False
         self._last_main_world_open = False
         self._main_world_hidden_since: float | None = None
@@ -71,18 +83,25 @@ class MiniMapPositionTracker:
         self._revalidation_started_monotonic: float | None = None
         self._revalidation_success_count = 0
         self._revalidation_candidate: tuple[float, float] | None = None
+        self._revalidation_candidate_at = 0.0
+        self._nearby = NearbyRecovery()
 
     @property
     def needs_calibration(self) -> bool:
-        return self._status in {"uninitialized", "lost"}
+        return self._status in {"uninitialized", "lost"} or self._revalidation_active or (
+            self._failure_started_monotonic is not None
+            and time.monotonic() - self._failure_started_monotonic >= _NEARBY_SEARCH_DELAY_SECONDS
+        )
 
     @property
     def status(self) -> str:
         return self._status
 
     def reset(self) -> None:
+        self._nearby.reset()
         self._detector = None
         self._status = "uninitialized"
+        self._clear_guidance_samples()
         self._map_name = ""
         self._confidence = 0.0
         self._local_confidence = 0.0
@@ -99,9 +118,13 @@ class MiniMapPositionTracker:
                 f"[map-mask-minimap] unsupported map for tracking: {map_name}"
             )
             return False
+        if not all(map(math.isfinite, position)):
+            return False
+        self._nearby.reset()
         detector = self._ensure_detector()
         detector.map_name = map_name
         detector.init_position(tuple(float(value) for value in position))
+        self._clear_guidance_samples()
         # The first local match is allowed to correct the big-map seed without
         # being rejected by the movement-speed guard.
         detector.pos_change_timer = Timer(diff_start_time=30)
@@ -126,11 +149,18 @@ class MiniMapPositionTracker:
         captured_image: Any,
         *,
         is_main_world_open: bool,
+        track_heading: bool = False,
     ) -> MiniMapTrackingSnapshot:
         screen_width, screen_height = _image_size(captured_image)
         now = time.monotonic()
+        if not is_main_world_open:
+            self._clear_guidance_samples()
+        elif not track_heading:
+            self._camera_bearing = None
+            self._camera_sample_at = self._last_heading_attempt = -math.inf
         self._observe_main_world_state(is_main_world_open, now)
         if not is_main_world_open:
+            self._nearby.reset()
             if self._status == "tracking":
                 self._reset_failure_streak()
             return self.snapshot(
@@ -138,7 +168,9 @@ class MiniMapPositionTracker:
                 screen_width=screen_width,
                 screen_height=screen_height,
             )
-        if self._status != "tracking":
+        if self._status == "uninitialized" or (
+            self._status == "lost" and now < self._nearby.next_probe
+        ):
             return self.snapshot(
                 is_main_world_open=True,
                 screen_width=screen_width,
@@ -161,36 +193,81 @@ class MiniMapPositionTracker:
             )
             minimap = rgb2luma(minimap)
 
-            confidence, local_confidence, candidate = detector._predict_position(
-                minimap,
-                MINIMAP_POSITION_SCALE_DICT[self._map_name],
+            if self._status == "tracking":
+                self._track_local(detector, minimap, now)
+            uncertain_since = (
+                self._revalidation_started_monotonic if self._revalidation_active else self._failure_started_monotonic
             )
-            self._confidence = round(float(confidence), 5)
-            self._local_confidence = round(float(local_confidence), 5)
-            candidate_position = tuple(np.round(candidate, 1))
-            if self._revalidation_active:
-                self._update_revalidation(candidate_position, now)
-            elif self._confidence < _MINIMAP_CONFIDENCE_THRESHOLD:
-                self._record_failure(
-                    f"confidence {self._confidence:.3f} below "
-                    f"{_MINIMAP_CONFIDENCE_THRESHOLD:.3f}"
-                )
-            elif not detector.verify_position(candidate_position):
-                self._record_failure("position movement verification failed")
-            else:
-                detector.position = candidate_position
-                self._reset_failure_streak()
+            if self._status == "lost" or (
+                uncertain_since is not None and now - uncertain_since >= _NEARBY_SEARCH_DELAY_SECONDS
+            ):
+                self._try_nearby_recovery(detector, minimap, now)
         except Exception as exc:  # noqa: BLE001
             reason = f"{type(exc).__name__}: {exc}"
-            if self._revalidation_active:
+            if self._status == "lost":
+                self._nearby.missed(now)
+            elif self._revalidation_active:
                 self._record_revalidation_failure(reason, now)
             else:
                 self._record_failure(reason)
+
+        if self._status != "tracking" or self._revalidation_active:
+            self._clear_guidance_samples()
+        elif track_heading and not self._failure_count and now - self._last_heading_attempt >= _HEADING_INTERVAL_SECONDS:
+            self._last_heading_attempt = now
+            try:
+                # Use this frame and its accepted position; the character can face
+                # a different direction from the camera while standing still.
+                rotation = detector.update_rotation(captured_image, update_position=False)
+                if math.isfinite(rotation) and detector.rotation_confidence >= 0.3:
+                    self._camera_bearing = (-rotation) % 360
+                    self._camera_sample_at = now
+            except Exception as exc:
+                logger.debug(f"[map-mask] camera heading unavailable: {exc}")
 
         return self.snapshot(
             is_main_world_open=True,
             screen_width=screen_width,
             screen_height=screen_height,
+        )
+
+    def _track_local(self, detector, minimap, now):
+        confidence, local_confidence, candidate = detector._predict_position(
+            minimap, MINIMAP_POSITION_SCALE_DICT[self._map_name],
+        )
+        if not all(map(math.isfinite, (confidence, local_confidence, *candidate))):
+            self._confidence = self._local_confidence = 0.0
+            raise ValueError("non-finite minimap match")
+        self._confidence = round(float(confidence), 5)
+        self._local_confidence = round(float(local_confidence), 5)
+        position = tuple(np.round(candidate, 1))
+        if self._revalidation_active:
+            self._update_revalidation(position, now)
+        elif self._confidence < _MINIMAP_CONFIDENCE_THRESHOLD:
+            self._record_failure(
+                f"confidence {self._confidence:.3f} below {_MINIMAP_CONFIDENCE_THRESHOLD:.3f}"
+            )
+        elif not detector.verify_position(position):
+            self._record_failure("position movement verification failed")
+        else:
+            detector.position = position
+            self._position_sample_at = now
+            self._reset_failure_streak()
+            self._nearby.reset()
+
+    def _try_nearby_recovery(self, detector, minimap, now):
+        # Keep the original anchor until a distinct nearby match survives three samples.
+        match = self._nearby.probe(minimap, self._map_name, detector.position, now)
+        if match is None:
+            return
+        position, score, margin = match
+        distance = math.dist(detector.position, position)
+        self._confidence = round(score, 5)
+        self._local_confidence = 0.0  # The narrow matcher's local score is unavailable for this frame.
+        self._accept_validated_position(position, now)
+        logger.info(
+            f"[map-mask-minimap] nearby tracking recovered map={self._map_name} "
+            f"distance={distance:.1f}px confidence={score:.3f} margin={margin:.3f}"
         )
 
     def snapshot(
@@ -217,6 +294,9 @@ class MiniMapPositionTracker:
                 hint = _UNINITIALIZED_HINT
             elif self._status == "lost":
                 hint = _LOST_HINT
+            elif (self._revalidation_active and self._revalidation_started_monotonic is not None
+                  and time.monotonic() - self._revalidation_started_monotonic >= _NEARBY_SEARCH_DELAY_SECONDS):
+                hint = "正在校验小地图位置"
         return MiniMapTrackingSnapshot(
             status="revalidating" if self._revalidation_active else self._status,
             is_main_world_open=is_main_world_open,
@@ -230,7 +310,17 @@ class MiniMapPositionTracker:
             viewport=viewport,
             screen_width=screen_width,
             screen_height=screen_height,
+            camera_bearing=self._camera_bearing if (
+                is_main_world_open and viewport and time.monotonic() - self._camera_sample_at <= HEADING_MAX_AGE_SECONDS
+            ) else None,
+            camera_sample_at=self._camera_sample_at,
+            position_sample_at=self._position_sample_at,
         )
+
+    def _clear_guidance_samples(self) -> None:
+        self._position_sample_at = -math.inf
+        self._camera_bearing = None
+        self._camera_sample_at = self._last_heading_attempt = -math.inf
 
     def _ensure_detector(self):
         if self._detector is None:
@@ -267,6 +357,10 @@ class MiniMapPositionTracker:
         if not is_main_world_open:
             if self._last_main_world_open:
                 self._main_world_hidden_since = now
+                if self._revalidation_active:
+                    self._revalidation_started_monotonic = None
+                    self._revalidation_success_count = 0
+                    self._revalidation_candidate = None
             self._last_main_world_open = False
             return
 
@@ -281,8 +375,7 @@ class MiniMapPositionTracker:
             hidden_duration = now - hidden_since if hidden_since is not None else 0.0
             if (
                 self._status == "tracking"
-                and not self._revalidation_active
-                and hidden_duration >= _MAIN_WORLD_EXIT_DEBOUNCE_SECONDS
+                and (self._revalidation_active or hidden_duration >= _MAIN_WORLD_EXIT_DEBOUNCE_SECONDS)
             ):
                 self._start_revalidation(now)
         self._last_main_world_open = True
@@ -314,22 +407,19 @@ class MiniMapPositionTracker:
 
         previous_candidate = self._revalidation_candidate
         if previous_candidate is not None:
-            distance = float(
-                np.linalg.norm(
-                    np.asarray(candidate_position) - np.asarray(previous_candidate)
-                )
-            )
-            if distance > _REENTRY_CANDIDATE_TOLERANCE:
+            if not consistent_motion(previous_candidate, candidate_position, now - self._revalidation_candidate_at):
                 self._failure_count += 1
                 self._revalidation_success_count = 1
                 self._revalidation_candidate = candidate_position
+                self._revalidation_candidate_at = now
                 self._finish_revalidation_if_timed_out(
                     now,
-                    f"candidate moved {distance:.1f}px during validation",
+                    "inconsistent motion between validation samples",
                 )
                 return
 
         self._revalidation_candidate = candidate_position
+        self._revalidation_candidate_at = now
         self._revalidation_success_count += 1
         if (
             self._revalidation_success_count
@@ -337,15 +427,22 @@ class MiniMapPositionTracker:
         ):
             return
 
-        detector = self._ensure_detector()
-        detector.position = candidate_position
-        detector.pos_change_timer.reset()
-        self._clear_revalidation()
-        self._reset_failure_streak()
+        self._accept_validated_position(candidate_position, now)
         logger.info(
             "[map-mask-minimap] previous position validated "
             f"confidence={self._confidence:.3f}"
         )
+
+    def _accept_validated_position(self, position, now):
+        detector = self._ensure_detector()
+        detector.position = position
+        detector.pos_change_timer.reset()
+        self._status = "tracking"
+        self._clear_guidance_samples()
+        self._position_sample_at = now
+        self._clear_revalidation()
+        self._reset_failure_streak()
+        self._nearby.reset()
 
     def _record_revalidation_failure(self, reason: str, now: float) -> None:
         self._failure_count += 1
@@ -373,6 +470,7 @@ class MiniMapPositionTracker:
         self._revalidation_started_monotonic = None
         self._revalidation_success_count = 0
         self._revalidation_candidate = None
+        self._revalidation_candidate_at = 0.0
 
     def _reset_failure_streak(self) -> None:
         self._failure_count = 0

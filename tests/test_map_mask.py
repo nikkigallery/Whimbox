@@ -631,7 +631,7 @@ class PearPalUserStateTests(unittest.TestCase):
         self.assertIs(provider._points, original_points)
         self.assertIs(provider._point_by_id, original_point_by_id)
 
-    def test_auto_refresh_manual_refresh_and_failure_backoff(self) -> None:
+    def test_map_open_and_manual_refresh_keep_the_last_good_points_on_failure(self) -> None:
         credentials = PearPalCredentials(
             token="abcDEF0123456789",
             openid="12405094",
@@ -661,7 +661,7 @@ class PearPalUserStateTests(unittest.TestCase):
                 box_ids=frozenset({"201"}),
                 dewdrop_ids=frozenset(),
             )
-            clock[0] = 106.0
+            clock[0] = 100.1
             provider.note_overlay_activity(is_bigmap_open=False)
             provider.note_overlay_activity(is_bigmap_open=True)
             self.assertEqual(user_client.calls, 2)
@@ -678,37 +678,31 @@ class PearPalUserStateTests(unittest.TestCase):
                 },
             )
 
-            clock[0] = 137.0
+            clock[0] = 200.0
             provider.note_overlay_activity(is_bigmap_open=True)
-            self.assertEqual(user_client.calls, 3)
-            self.assertEqual(
-                provider.get_user_status()["last_refresh_reason"],
-                "periodic",
-            )
+            self.assertEqual(user_client.calls, 2)
 
             user_client.error = RuntimeError("temporary API error")
             failed_status = provider.refresh_user_state()
-            self.assertEqual(user_client.calls, 4)
+            self.assertEqual(user_client.calls, 3)
             self.assertEqual(failed_status["refresh_failure_count"], 1)
             self.assertIn("temporary API error", failed_status["refresh_error"])
-            self.assertAlmostEqual(
-                failed_status["next_refresh_in_seconds"],
-                5.0,
-            )
+            self.assertEqual(failed_status["next_refresh_in_seconds"], 0)
             self.assertTrue(
                 provider.get_point_detail("pearpal:201")["detail"]["awarded"]
             )
 
-            clock[0] = 138.0
+            clock[0] = 231.0
             provider.note_overlay_activity(is_bigmap_open=True)
-            self.assertEqual(user_client.calls, 4)
+            self.assertEqual(user_client.calls, 3)
 
             user_client.error = None
-            clock[0] = 142.0
+            clock[0] = 260.0
+            provider.note_overlay_activity(is_bigmap_open=False)
             provider.note_overlay_activity(is_bigmap_open=True)
             retry_status = provider.get_user_status()
-            self.assertEqual(user_client.calls, 5)
-            self.assertEqual(retry_status["last_refresh_reason"], "retry")
+            self.assertEqual(user_client.calls, 4)
+            self.assertEqual(retry_status["last_refresh_reason"], "map-open")
             self.assertEqual(retry_status["refresh_error"], "")
 
 
