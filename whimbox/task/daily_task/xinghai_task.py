@@ -140,9 +140,7 @@ class XinghaiTask(TaskTemplate):
 
     @register_step("检查星海拾光完成情况")
     def step2(self):
-        ui_control.goto_page(page_xhsg)
-        itt.delay(1, comment="等待页面稳定")
-        itt.wait_until_stable(threshold=0.99)
+        ui_control.goto_page(page_daily_task)
         try:
             self.current_score = get_daily_score(AreaXhsgScore)
         except:
@@ -155,6 +153,9 @@ class XinghaiTask(TaskTemplate):
 
     @register_step("查看星海拾光具体任务")
     def step3(self):
+        ui_control.goto_page(page_xhsg)
+        itt.delay(1, comment="等待页面稳定")
+        itt.wait_until_stable(threshold=0.99)
         def check_task(click_pos):
             itt.move_and_click(click_pos, anchor=ANCHOR_CENTER)
             time.sleep(0.3)
@@ -237,14 +238,15 @@ class XinghaiTask(TaskTemplate):
 
     @register_step("领取星海拾光奖励")
     def step5(self):
-        ui_control.goto_page(page_xhsg)
-        itt.delay(1, comment="等待页面稳定")
-        itt.wait_until_stable(threshold=0.99)
+        ui_control.goto_page(page_daily_task)
         score = get_daily_score(AreaXhsgScore)
         if score != 500:
             self.update_task_result(status=STATE_TYPE_FAILED, message="星海拾光未完成")
         else:
             self.update_task_result(message="星海拾光已完成")
+        ui_control.goto_page(page_xhsg)
+        itt.delay(1, comment="等待页面稳定")
+        itt.wait_until_stable(threshold=0.99)
         get_daily_reward(AreaXhsgRewards)
 
 

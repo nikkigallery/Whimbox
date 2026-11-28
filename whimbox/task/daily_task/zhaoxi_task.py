@@ -110,9 +110,7 @@ class ZhaoxiTask(TaskTemplate):
 
     @register_step("检查朝夕心愿完成情况")
     def step1(self):
-        ui_control.goto_page(page_zxxy)
-        itt.delay(1, comment="等待页面稳定")
-        itt.wait_until_stable(threshold=0.99)
+        ui_control.goto_page(page_daily_task)
         try:
             self.current_score = get_daily_score(AreaZxxyScore)
         except:
@@ -125,6 +123,9 @@ class ZhaoxiTask(TaskTemplate):
 
     @register_step("查看朝夕心愿具体任务")
     def step2(self):
+        ui_control.goto_page(page_zxxy)
+        itt.delay(1, comment="等待页面稳定")
+        itt.wait_until_stable(threshold=0.99)
         def check_task(click_pos):
             itt.move_and_click(click_pos, anchor=ANCHOR_CENTER)
             time.sleep(0.3)
@@ -253,9 +254,7 @@ class ZhaoxiTask(TaskTemplate):
 
     @register_step("领取朝夕心愿奖励")
     def step5(self):
-        ui_control.goto_page(page_zxxy)
-        itt.delay(1, comment="等待页面稳定")
-        itt.wait_until_stable(threshold=0.99)
+        ui_control.goto_page(page_daily_task)
         score = get_daily_score(AreaZxxyScore)
         self.current_score = score
         self.log_to_gui(f"朝夕心愿最终完成度：{score}/500")
@@ -263,6 +262,9 @@ class ZhaoxiTask(TaskTemplate):
             self.update_task_result(status=STATE_TYPE_FAILED, message="朝夕心愿未完成")
         else:
             self.update_task_result(message="朝夕心愿已完成")
+        ui_control.goto_page(page_zxxy)
+        itt.delay(1, comment="等待页面稳定")
+        itt.wait_until_stable(threshold=0.99)
         get_daily_reward(AreaZxxyRewards)
 
 
@@ -283,5 +285,6 @@ class ZhaoxiTask(TaskTemplate):
 
 if __name__ == "__main__":
     zhaoxi_task = ZhaoxiTask(session_id="debug")
-    zhaoxi_task.task_run()
-    print(zhaoxi_task.task_result)
+    # zhaoxi_task.task_run()
+    # print(zhaoxi_task.task_result)
+    zhaoxi_task.step5()
