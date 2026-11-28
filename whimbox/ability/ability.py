@@ -122,8 +122,12 @@ class AbilityManager:
             AreaAbilityPlan2Button.click()
         elif ability_plan == 3:
             AreaAbilityPlan3Button.click()
+        elif ability_plan == 4:
+            AreaAbilityPlan4Button.click()
+        elif ability_plan == 5:
+            AreaAbilityPlan5Button.click()
         else:
-            raise(f'能力方案只能是123')
+            raise(f'能力方案只能是12345')
     
 
     def _set_ability(self, ability_name: str, ability_key):

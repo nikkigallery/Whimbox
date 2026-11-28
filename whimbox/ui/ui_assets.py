@@ -207,6 +207,8 @@ AreaAbilityPlanChangeButton = Area(anchor=ANCHOR_TOP_LEFT)
 AreaAbilityPlan1Button = Area(anchor=ANCHOR_TOP_LEFT)
 AreaAbilityPlan2Button = Area(anchor=ANCHOR_TOP_LEFT)
 AreaAbilityPlan3Button = Area(anchor=ANCHOR_TOP_LEFT)
+AreaAbilityPlan4Button = Area(anchor=ANCHOR_TOP_LEFT)
+AreaAbilityPlan5Button = Area(anchor=ANCHOR_TOP_LEFT)
 
 # 素材相关
 IconMaterialTypeAnimal = ImgIcon(print_log=LOG_WHEN_TRUE)
