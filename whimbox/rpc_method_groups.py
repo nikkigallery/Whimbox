@@ -232,6 +232,7 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
         return {
             "labels": map_mask_service.get_labels(),
             "selected_label_ids": map_mask_service.get_selected_label_ids(),
+            "scene_guidance_supported": True,
         }
 
     if method == "map_mask.prepare_points":
@@ -254,6 +255,8 @@ def handle_map_mask_method(method: str, params: Dict[str, Any]) -> Any:
             viewport=_parse_map_mask_viewport(params.get("viewport")),
             map_name=_parse_optional_string(params.get("map_name")),
             label_ids=_parse_optional_string_list(params.get("label_ids")),
+            scene_guidance=params.get("scene_guidance") is True,
+            compass_fallback=params.get("compass_fallback") is True,
         )
 
     if method == "map_mask.get_user_status":

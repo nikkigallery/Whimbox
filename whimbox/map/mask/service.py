@@ -15,13 +15,17 @@ from whimbox.config.config import global_config
 from .bigmap_state_provider import BigMapDetectionState, BigMapStateProvider
 from .coordinate import point_to_visible, point_to_visible_in_circle
 from .local_provider import LocalJsonProvider
-from .minimap_tracker import MiniMapPositionTracker, MiniMapTrackingSnapshot
+from .minimap_tracker import (
+    HEADING_MAX_AGE_SECONDS, NAVIGATION_POSITION_MAX_AGE_SECONDS,
+    MiniMapPositionTracker, MiniMapTrackingSnapshot,
+)
 from .models import MapMaskLabel, MapMaskPoint, MapMaskState, MapMaskViewport
 from .mouse_wheel_guard import MouseWheelGuard
 from .pearpal_auth import parse_login_storage
 from .pearpal_provider import OfficialPearPalProvider
 from .provider import MapMaskProvider
 from .region_detector import BigMapRegionDetector
+from .scene_guidance import nearest_scene_target
 from .viewport_provider import MapMaskViewportProvider, ViewportResult
 
 
@@ -58,6 +62,7 @@ class MapMaskService:
         self._detection_wake = threading.Event()
         self._detection_thread: threading.Thread | None = None
         self._detection_last_activity = 0.0
+        self._last_scene_request = float("-inf")
         self._detection_map_name: str | None = None
         self._detection_snapshot: (
             tuple[BigMapDetectionState, ViewportResult, MiniMapTrackingSnapshot]
@@ -144,6 +149,14 @@ class MapMaskService:
                         bigmap_state = self.bigmap_state_provider.detect(
                             captured_image=captured_image,
                         )
+                        if self.enabled and not bigmap_state.detection_error and (
+                            bigmap_state.is_bigmap_open or bigmap_state.is_main_world_open
+                        ):
+                            # Map details and transitions can hide the map icon. Only a
+                            # confirmed return to the world re-arms the next M opening.
+                            self.official_provider.note_overlay_activity(
+                                is_bigmap_open=bigmap_state.is_bigmap_open,
+                            )
                         self._wheel_bigmap_open = bool(bigmap_state.is_bigmap_open)
                         self._wheel_bigmap_detection_monotonic = time.monotonic()
 
@@ -198,13 +211,12 @@ class MapMaskService:
                                         captured_image=captured_image,
                                     )
                         self._try_calibrate_minimap(viewport_result)
+                        track_heading = time.monotonic() - self._last_scene_request < 1.0
                         minimap_snapshot = self.minimap_tracker.update(
                             captured_image,
                             is_main_world_open=bigmap_state.is_main_world_open,
+                            track_heading=track_heading,
                         )
-                    self.official_provider.note_overlay_activity(
-                        is_bigmap_open=bigmap_state.is_bigmap_open,
-                    )
                 except Exception as exc:  # noqa: BLE001
                     self._wheel_bigmap_open = False
                     logger.exception(f"[map-mask-worker] detection cycle failed: {exc}")
@@ -239,7 +251,6 @@ class MapMaskService:
                 self._minimap_calibration_active = False
                 self._minimap_calibration_deadline = 0.0
                 self._mouse_wheel_guard.stop()
-            self.official_provider.note_overlay_inactive()
             logger.info(f"[map-mask-worker] stopped reason={stop_reason}")
 
     def _should_block_mouse_wheel(self) -> bool:
@@ -409,6 +420,7 @@ class MapMaskService:
         requested_enabled = bool(enabled)
         self.enabled = requested_enabled and not has_foreground_task()
         if not self.enabled:
+            self.official_provider.reset_overlay_activity()
             self._wheel_bigmap_open = False
             self._last_blocked_wheel_monotonic = 0.0
             self._minimap_calibration_active = False
@@ -450,20 +462,22 @@ class MapMaskService:
         viewport: MapMaskViewport | None = None,
         map_name: str | None = None,
         label_ids: list[str] | None = None,
+        scene_guidance: bool = False,
+        compass_fallback: bool = False,
     ) -> dict[str, Any]:
+        if scene_guidance:
+            self._last_scene_request = time.monotonic()
         self._touch_detection_worker(map_name)
-        state, active_viewport, _, _ = self._build_state(
+        state, active_viewport, detection, tracking = self._build_state(
             viewport=viewport,
             map_name=map_name,
         )
         state_dict = state.to_dict()
         mode = state.display_mode or "unavailable"
+        result = {"state": state_dict, "viewport": {}, "points": []}
+        selected_label_ids = label_ids if label_ids is not None else self.get_selected_label_ids()
         if not self.enabled or not state.is_map_open or active_viewport is None:
-            return {"state": state_dict, "viewport": {}, "points": []}
-
-        selected_label_ids = (
-            label_ids if label_ids is not None else self.get_selected_label_ids()
-        )
+            return result
         provider = self._provider_with_fallback()
         candidate_cache_key = (
             id(provider),
@@ -477,20 +491,20 @@ class MapMaskService:
             _viewport_projection_cache_key(active_viewport),
         )
 
+        candidates = self._get_candidate_points(
+            key=candidate_cache_key,
+            provider=provider,
+            label_ids=selected_label_ids,
+            map_name=active_viewport.map_name,
+        )
         cached_visible = self._get_cached_visible_points(visible_cache_key)
         if cached_visible is not None:
             visible_points = list(cached_visible)
         else:
-            points = self._get_candidate_points(
-                key=candidate_cache_key,
-                provider=provider,
-                label_ids=selected_label_ids,
-                map_name=active_viewport.map_name,
-            )
             points = self._get_points_in_viewport_bounds(
                 key=candidate_cache_key,
                 viewport=active_viewport,
-                fallback_points=points,
+                fallback_points=candidates,
             )
             visible_points = []
             for point in points:
@@ -505,11 +519,29 @@ class MapMaskService:
                 points=visible_points,
             )
 
-        return {
-            "state": state_dict,
-            "viewport": active_viewport.to_dict(),
-            "points": visible_points,
-        }
+        result["viewport"] = active_viewport.to_dict()
+        result["points"] = visible_points
+        now = time.monotonic()
+        if (
+            scene_guidance and mode == "minimap" and not detection.detection_error
+            and provider is self.official_provider and tracking.status == "tracking"
+            and tracking.map_name == active_viewport.map_name
+            and tracking.position_x is not None and tracking.position_y is not None
+            and now - tracking.position_sample_at <= NAVIGATION_POSITION_MAX_AGE_SECONDS
+        ):
+            camera = tracking.camera_bearing if now - tracking.camera_sample_at <= HEADING_MAX_AGE_SECONDS else None
+            if camera is None and not compass_fallback:
+                return result
+            user = self.official_provider.get_user_status()
+            if user["auth_state"] == "authenticated" and user["hide_awarded"]:
+                target = nearest_scene_target(
+                    candidates, tracking.position_x, tracking.position_y, camera,
+                )
+                # A login, refresh or region change can invalidate this point list.
+                if target is not None and self.official_provider.points_revision == candidate_cache_key[1]:
+                    target["progress_cached"] = user["refresh_failure_count"] > 0
+                    result["scene_target"] = target
+        return result
 
     def get_point_detail(self, point_id: str) -> dict[str, Any]:
         return self._provider_with_fallback().get_point_detail(point_id)
