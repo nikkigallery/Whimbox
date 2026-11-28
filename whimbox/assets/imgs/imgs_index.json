@@ -20,6 +20,12 @@
   "AreaAbilityPlan3Button": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaAbilityPlan3Button.png"
   },
+  "AreaAbilityPlan4Button": {
+    "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaAbilityPlan4Button.png"
+  },
+  "AreaAbilityPlan5Button": {
+    "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaAbilityPlan5Button.png"
+  },
   "AreaAbilityPlanChangeButton": {
     "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaAbilityPlanChangeButton.png"
   },
@@ -199,12 +205,6 @@
   },
   "AreaUnexceptedPopupConfirm": {
     "rel_path": "imgs\\Windows\\UI\\login\\AreaUnexceptedPopupConfirm.png"
-  },
-  "AreaWardrobeAbilityBattleText": {
-    "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaWardrobeAbilityBattleText.png"
-  },
-  "AreaWardrobeTab3": {
-    "rel_path": "imgs\\Windows\\UI\\wardrobe\\AreaWardrobeTab3.png"
   },
   "AreaWeeklyCountText": {
     "rel_path": "imgs\\Windows\\UI\\huanjing\\weekly_realm\\AreaWeeklyCountText.png"
